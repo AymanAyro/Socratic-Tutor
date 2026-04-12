@@ -1,0 +1,4 @@
+{"student_answer": "I think a list in Python stores ordered items and is mutable.", "concept": "Python lists", "expected_state": "correct", "expected_gap_theme": null}
+{"student_answer": "Lists are like arrays but I'm not sure about ordering.", "concept": "Python lists", "expected_state": "partial", "expected_gap_theme": "ordering"}
+{"student_answer": "A list is a fixed-size tuple.", "concept": "Python lists", "expected_state": "wrong", "expected_gap_theme": "mutability"}
+{"student_answer": "I don't know.", "concept": "Python lists", "expected_state": "stuck", "expected_gap_theme": null}

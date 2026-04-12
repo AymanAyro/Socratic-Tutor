@@ -1,0 +1,142 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Turn latency (seconds)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(tutor_turn_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(tutor_turn_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "type": "piechart",
+      "title": "Classifier state",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (state) (tutor_classifier_state_total)",
+          "legendFormat": "{{state}}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Guardrail triggers (total)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "tutor_guardrail_triggers_total" }],
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Escape hatch (total)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "sum(tutor_escape_hatch_total)" }],
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Question repetition retries (total)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "tutor_question_repetition_retries_total" }],
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Tokens per turn",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(tutor_tokens_per_turn_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Session duration (seconds)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(tutor_session_duration_seconds_bucket[15m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(tutor_session_duration_seconds_bucket[15m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Questions per session (when session ends)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(tutor_questions_per_session_bucket[15m])) by (le))",
+          "legendFormat": "p50"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Exam session score (% of possible)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(tutor_exam_session_score_percent_bucket[15m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(tutor_exam_session_score_percent_bucket[15m])) by (le))",
+          "legendFormat": "p90"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Repetition retries (rate)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "rate(tutor_question_repetition_retries_total[5m])",
+          "legendFormat": "retries/s"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Mastery score (sample series)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "tutor_mastery_score" }],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 32 }
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["socratic-tutor"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "title": "Tutor Overview",
+  "uid": "tutor-overview",
+  "version": 2
+}

@@ -1,0 +1,21 @@
+.venv/
+SRC/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+coverage.xml
+dist/
+node_modules/
+frontend/dist/
+*.egg-info/
+.env
+SRC/.env
+# Docker secrets (examples *.example are committed)
+Docker/env/.env.postgres
+Docker/env/.env.grafana
+Docker/env/.env.app
+SRC/uploads/
+*.log
+.DS_Store
+.cursor/
