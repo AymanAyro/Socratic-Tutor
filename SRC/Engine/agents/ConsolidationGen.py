@@ -19,13 +19,16 @@ async def generate_consolidation_question(
         "You are a tutor. The student has seen the full model answer and rated their understanding.\n"
         "Ask exactly ONE short question that checks whether they understood the explanation — "
         "not a repeat of the Socratic probe. The answer should be easy to verify from the model answer.\n"
+    )
+    prompt = (
         f"Concept: {concept_name}\n"
         f"Model answer (excerpt): {ideal_answer[:1200]}\n"
         f"Self-rating (1-5): {self_rating}\n"
+        "Write only the single consolidation question, no preamble."
     )
     gen = get_generation_client()
     text, _ = await gen.generate(
-        prompt="Write only the single consolidation question, no preamble.",
+        prompt=prompt,
         system=system,
         model=settings.generation_model_id,
     )

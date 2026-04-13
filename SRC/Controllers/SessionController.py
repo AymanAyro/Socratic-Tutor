@@ -46,13 +46,16 @@ class SessionController:
         try:
             settings = get_settings()
             gen = get_generation_client()
+            system = "Return only a short title with no punctuation beyond spaces."
             prompt = (
-                f"Generate a 3-5 word session title for a tutoring session on: {topic}. "
+                f"Create a 3-5 word tutoring session title.\n"
+                f"Topic: {topic}\n"
+                f"Session date label: {date_str}\n\n"
                 "Output only the title."
             )
             title, _ = await gen.generate(
                 prompt=prompt,
-                system="Return only a short title with no punctuation beyond spaces.",
+                system=system,
                 model=settings.generation_model_id,
             )
             cleaned = " ".join((title or "").split()).strip(" -:.")
@@ -176,6 +179,10 @@ class SessionController:
                 "probe_turns": 0,
                 "background_dispatched": True,
                 "session_stats": {"classifier_sequence": [], "escape_hatch_count": 0},
+                "surrender_streak": 0,
+                "learning_level": "recall",
+                "got_it_streak": 0,
+                "stuck_turn_streak": 0,
                 "consolidate_attempts": 0,
                 "needs_report": False,
                 "end_requested": False,
@@ -385,6 +392,8 @@ class SessionController:
                     "session_mode": out.get("session_mode", "socratic"),
                     "stage2": True,
                     "phase": out.get("phase"),
+                    "learning_level": out.get("learning_level", "recall"),
+                    "surrender_streak": int(out.get("surrender_streak", 0)),
                 }
                 yield sse_event("done", json.dumps(done_payload))
         else:
@@ -456,6 +465,14 @@ class SessionController:
             raise HTTPException(status_code=400, detail="invalid or ended session")
         if not getattr(session, "use_stage2", False) or teaching_graph is None or stage2_asset_store is None:
             raise HTTPException(status_code=400, detail="Not a Stage 2 session")
+        settings = get_settings()
+        logger.info("Reflect submit start session=%s rating=%s", session_id, body.rating)
+        logger.debug(
+            "Reflect submit config session=%s backend=%s generation_model=%s",
+            session_id,
+            settings.generation_backend,
+            settings.generation_model_id,
+        )
         cfg = {
             "configurable": {
                 "thread_id": str(session_id),
@@ -464,10 +481,18 @@ class SessionController:
                 "asset_store": stage2_asset_store,
             }
         }
-        await teaching_graph.ainvoke(
-            Command(update={"self_rating": body.rating}, goto="reflect_consolidate"),
-            cfg,
-        )
+        try:
+            await teaching_graph.ainvoke(
+                Command(update={"self_rating": body.rating}, goto="reflect_consolidate"),
+                cfg,
+            )
+        except ValueError as exc:
+            logger.exception("Reflect submit failed session=%s", session_id)
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.exception("Reflect submit failed session=%s", session_id)
+            raise HTTPException(status_code=500, detail="Reflect consolidation failed.") from exc
+        logger.info("Reflect submit success session=%s", session_id)
         return await self.get_teaching_phase(
             db, session_id, teaching_graph=teaching_graph, stage2_asset_store=stage2_asset_store
         )

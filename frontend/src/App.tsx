@@ -72,6 +72,8 @@ function Nav() {
           <button
             type="button"
             onClick={toggleTheme}
+            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+            title="Toggle dark mode"
             className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-muted hover:text-text"
           >
             {theme === "dark" ? "Light" : "Dark"}
@@ -90,6 +92,15 @@ const pageVariants = {
 
 export default function App() {
   const location = useLocation();
+  useEffect(() => {
+    const routeTitles: Record<string, string> = {
+      "/": "Tutor",
+      "/dashboard": "Dashboard",
+      "/content": "Content",
+    };
+    const title = routeTitles[location.pathname] ?? "Session Report";
+    document.title = `${title} · Socratic Tutor`;
+  }, [location.pathname]);
   return (
     <div className="min-h-screen flex flex-col">
       <Nav />

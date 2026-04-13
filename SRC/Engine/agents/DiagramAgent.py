@@ -19,22 +19,21 @@ Rules:
 - Show the mechanism, not a list: cause → effect, components → relationships, steps → order
 - No title node. No legend nodes.
 - Output only the raw Mermaid code. Nothing else.
-
-Concept: {concept}
-Description: {description}
 """
 
 
 async def generate_concept_diagram_mermaid(db: AsyncSession, concept_id: uuid.UUID) -> str:
     concept = (await db.execute(select(Concept).where(Concept.id == concept_id))).scalar_one()
     settings = get_settings()
-    system = DIAGRAM_SYSTEM.format(
-        concept=concept.name,
-        description=(concept.description or concept.name)[:800],
+    system = DIAGRAM_SYSTEM
+    prompt = (
+        f"Concept: {concept.name}\n"
+        f"Description: {(concept.description or concept.name)[:800]}\n\n"
+        "Output only valid Mermaid."
     )
     gen = get_generation_client()
     text, _ = await gen.generate(
-        prompt="Output only valid Mermaid.",
+        prompt=prompt,
         system=system,
         model=settings.generation_model_id,
     )

@@ -1,9 +1,9 @@
 import json
+import logging
 import time
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from difflib import SequenceMatcher
 
 from redis.asyncio import Redis
 from sqlalchemy import select
@@ -11,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from Engine.AntiAnswerGuard import AntiAnswerGuard
 from Engine.QuestionGenerator import QuestionGenerator
+from Engine.student_signals import is_student_surrender
+from Engine.tutor_fallback import is_near_duplicate_question, pick_fallback_question
 from Engine.UnderstandingClassifier import UnderstandingClassifier
 from Models.Content import Concept
 from Models.Session import Turn, TutorSession
@@ -25,6 +27,8 @@ from Stats.Metrics import (
 from Utils.ContextManager import TurnLike
 from Utils.StreamingHandler import collect_stream
 from config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 def _exam_turn_points(state: str) -> float:
@@ -88,18 +92,6 @@ class SocraticEngine:
             out.append(t.question_generated.strip())
         return out
 
-    def _is_near_duplicate(self, new_q: str, prior: list[str]) -> bool:
-        n = new_q.lower().strip()
-        if len(n) < 14:
-            return False
-        thr = self._settings.repetition_similarity_threshold
-        for p in prior:
-            if not p:
-                continue
-            if SequenceMatcher(None, n, p.lower().strip()).ratio() >= thr:
-                return True
-        return False
-
     async def _prior_turns(self, session_id: uuid.UUID) -> list[Turn]:
         return list(
             (
@@ -127,12 +119,15 @@ class SocraticEngine:
         prompt_version: str,
     ) -> AsyncIterator[dict]:
         t0 = time.perf_counter()
+        surrendering = is_student_surrender(student_answer)
         cr = await self._classifier.classify(
             concept.id, concept.name, student_answer, session.id
         )
         CLASSIFIER_STATE.labels(state=cr.state).inc()
         stuck_streak = await self._compute_stuck_streak(session, cr.state)
         mode = self.resolve_mode(cr.state, stuck_streak, concept.id)
+        if surrendering and stuck_streak < 2:
+            mode = "reframe"
 
         tokens = cr.tokens_used
         guard_triggered = False
@@ -149,6 +144,8 @@ class SocraticEngine:
         exam_denom = n_prior + 1
         exam_avg = (points_prior + turn_score) / exam_denom if exam_denom else 0.0
 
+        used_template_fallback = False
+        thr = self._settings.repetition_similarity_threshold
         for attempt in range(max_retries + 1):
             stream = self._generator.generate_stream(
                 session.id,
@@ -166,10 +163,17 @@ class SocraticEngine:
                 question_text, concept.name, session.id
             )
             tokens += gtokens
-            repetitive = self._is_near_duplicate(question_text, prior_q_texts)
+            repetitive = is_near_duplicate_question(question_text, prior_q_texts, thr)
             if repetitive:
                 repetition_triggered = True
                 REPETITION_RETRIES.inc()
+
+            logger.debug(
+                "SocraticEngine.process_turn attempt=%s passes=%s repetitive=%s",
+                attempt,
+                passes,
+                repetitive,
+            )
 
             if passes and not repetitive:
                 break
@@ -182,10 +186,30 @@ class SocraticEngine:
                 yield {"event": "regenerating", "data": "retry"}
                 continue
 
-            question_text = (
-                "What is one concrete example from the material that relates to this concept?"
+            question_text = pick_fallback_question(
+                concept.name,
+                prior_q_texts,
+                thr,
+                rotation_seed=len(prior_q_texts),
             )
+            used_template_fallback = True
             break
+
+        if used_template_fallback:
+            logger.info(
+                "SocraticEngine: template fallback session_id=%s concept_id=%s "
+                "guardrail_triggered=%s repetition_triggered=%s",
+                session.id,
+                concept.id,
+                guard_triggered,
+                repetition_triggered,
+            )
+
+        if surrendering and stuck_streak < 2:
+            question_text = (
+                f"Let's try another angle before hints: in one sentence, where might {concept.name} "
+                "be useful in a real system?"
+            )
 
         elapsed = time.perf_counter() - t0
         TURN_LATENCY.observe(elapsed)
@@ -204,6 +228,11 @@ class SocraticEngine:
             "tokens_used": tokens,
             "prompt_version": prompt_version,
             "session_mode": session_mode,
+            "rubric": {
+                "accuracy": 3 if cr.state == "correct" else 2 if cr.state == "partial" else 1,
+                "depth": 2 if len(student_answer.split()) >= 8 else 1,
+                "vocabulary": 2 if len({w for w in student_answer.lower().split() if len(w) > 6}) >= 2 else 1,
+            },
         }
         if session_mode == "exam_prep":
             done_payload["exam_turn_score"] = round(turn_score, 3)

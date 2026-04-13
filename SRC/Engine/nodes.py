@@ -8,7 +8,6 @@ import logging
 import time
 import uuid
 from datetime import datetime, timezone
-from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -43,12 +42,25 @@ from config import get_settings
 from database import AsyncSessionLocal
 from Engine.AntiAnswerGuard import AntiAnswerGuard
 from Engine.QuestionGenerator import QuestionGenerator
+from Engine.student_signals import is_student_surrender
+from Engine.tutor_fallback import is_near_duplicate_question, pick_fallback_question
 from Engine.UnderstandingClassifier import UnderstandingClassifier
 
 if TYPE_CHECKING:
     pass
 
 logger = logging.getLogger(__name__)
+
+
+DIAGRAM_UNAVAILABLE_SVG = (
+    "<svg xmlns='http://www.w3.org/2000/svg' width='520' height='120' role='img' aria-label='Diagram unavailable'>"
+    "<rect width='100%' height='100%' fill='#f8f9fc' stroke='#d8dce6' stroke-width='1' rx='8'/>"
+    "<text x='20' y='50' font-family='Arial, sans-serif' font-size='16' fill='#5f677a'>Diagram unavailable</text>"
+    "<text x='20' y='78' font-family='Arial, sans-serif' font-size='12' fill='#7b8191'>"
+    "The explanation is still available for this turn."
+    "</text>"
+    "</svg>"
+)
 
 
 def _exam_turn_points(state: str) -> float:
@@ -91,18 +103,6 @@ def _prior_question_strings(memory_turns: list[TurnLike], opening_question: str 
     return out
 
 
-def _is_near_duplicate(new_q: str, prior: list[str], threshold: float) -> bool:
-    n = new_q.lower().strip()
-    if len(n) < 14:
-        return False
-    for p in prior:
-        if not p:
-            continue
-        if SequenceMatcher(None, n, p.lower().strip()).ratio() >= threshold:
-            return True
-    return False
-
-
 async def _compute_stuck_streak(db: AsyncSession, session_id: uuid.UUID, new_state: str) -> int:
     prev = (
         await db.execute(
@@ -138,11 +138,19 @@ async def _generate_turn_clarification(
                 generate_turn_diagram(topic, question),
             )
             diagram_svg = await render_mermaid_to_svg(mermaid, fallback_label=topic)
+            if not diagram_svg:
+                logger.warning("Turn diagram empty turn=%s topic=%s", turn_id, topic)
+                diagram_svg = DIAGRAM_UNAVAILABLE_SVG
             turn.clarification = clarification
             turn.diagram_svg = diagram_svg
             turn.clarification_status = "ready"
-        except Exception:
-            logger.exception("Turn clarification failed turn=%s", turn_id)
+        except Exception as exc:
+            logger.exception("Turn clarification failed turn=%s topic=%s error=%s", turn_id, topic, exc)
+            turn.clarification = (
+                "Correct answer unavailable for this turn due to a generation error. "
+                "Review the tutor prompt and your response together."
+            )
+            turn.diagram_svg = DIAGRAM_UNAVAILABLE_SVG
             turn.clarification_status = "failed"
         await bg_db.commit()
 
@@ -250,6 +258,18 @@ def _resolve_mode(state: str, stuck_streak: int, concept_id: uuid.UUID, settings
     return "scaffold"
 
 
+def _next_learning_level(current: str, got_it_streak: int, stuck_streak: int) -> str:
+    levels = ["recall", "comprehension", "application", "analysis"]
+    if current not in levels:
+        current = "recall"
+    idx = levels.index(current)
+    if got_it_streak >= 2 and idx < len(levels) - 1:
+        return levels[idx + 1]
+    if stuck_streak >= 2 and idx > 0:
+        return levels[idx - 1]
+    return current
+
+
 async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, Any]:
     cfg = config.get("configurable") or {}
     db: AsyncSession = cfg["db"]
@@ -267,6 +287,7 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
     if not isinstance(last, HumanMessage):
         return {}
     student_answer = (last.content or "").strip()
+    surrendering = is_student_surrender(student_answer)
 
     t0 = time.perf_counter()
     out: dict[str, Any] = {}
@@ -297,6 +318,13 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
     CLASSIFIER_STATE.labels(state=cr.state).inc()
     stuck = await _compute_stuck_streak(db, session_uuid, cr.state)
     mode = _resolve_mode(cr.state, stuck, concept_uuid, settings)
+    surrender_streak = int(state.get("surrender_streak") or 0)
+    if surrendering:
+        surrender_streak += 1
+        if surrender_streak < 2:
+            mode = "reframe"
+    else:
+        surrender_streak = 0
 
     force_reveal = bool(state.get("force_reveal"))
     wants_reveal = student_answer.strip() == "/reveal" or force_reveal
@@ -323,6 +351,22 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
         stats["escape_hatch_count"] = stats["escape_hatch_count"] + 1
 
     prompt_version = state.get("prompt_version") or session_row.prompt_version
+    got_it_streak = int(state.get("got_it_streak") or 0)
+    stuck_turn_streak = int(state.get("stuck_turn_streak") or 0)
+    if cr.state == "correct":
+        got_it_streak += 1
+        stuck_turn_streak = 0
+    elif cr.state == "stuck":
+        stuck_turn_streak += 1
+        got_it_streak = 0
+    else:
+        got_it_streak = 0
+        stuck_turn_streak = 0
+    learning_level = _next_learning_level(
+        str(state.get("learning_level") or "recall"),
+        got_it_streak,
+        stuck_turn_streak,
+    )
 
     if should_reveal:
         PHASE_TRANSITIONS.labels(from_phase="PROBE", to_phase="REVEAL").inc()
@@ -354,6 +398,10 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
             "last_classifier_state": cr.state,
             "last_classifier_confidence": cr.confidence,
             "session_stats": stats,
+            "surrender_streak": surrender_streak,
+            "learning_level": learning_level,
+            "got_it_streak": got_it_streak,
+            "stuck_turn_streak": stuck_turn_streak,
             "force_reveal": False,
         }
 
@@ -374,6 +422,8 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
     exam_denom = n_prior + 1
     exam_avg = (points_prior + turn_score) / exam_denom if exam_denom else 0.0
 
+    used_template_fallback = False
+    thr = settings.repetition_similarity_threshold
     for attempt in range(max_retries + 1):
         stream = generator.generate_stream(
             session_uuid,
@@ -389,10 +439,17 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
         question_text, _ = await collect_stream(stream)
         passes, gtokens = await guard.check_passes(question_text, concept_row.name, session_uuid)
         tokens += gtokens
-        repetitive = _is_near_duplicate(question_text, prior_q_texts, settings.repetition_similarity_threshold)
+        repetitive = is_near_duplicate_question(question_text, prior_q_texts, thr)
         if repetitive:
             repetition_triggered = True
             REPETITION_RETRIES.inc()
+        logger.debug(
+            "probe_turn attempt=%s session_id=%s passes=%s repetitive=%s",
+            attempt,
+            session_uuid,
+            passes,
+            repetitive,
+        )
         if passes and not repetitive:
             break
         if not passes:
@@ -400,10 +457,28 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
             GUARDRAIL_TRIGGERS.inc()
         if attempt < max_retries and (not passes or repetitive):
             continue
-        question_text = (
-            "What is one concrete example from the material that relates to this concept?"
+        question_text = pick_fallback_question(
+            concept_row.name,
+            prior_q_texts,
+            thr,
+            rotation_seed=len(prior_q_texts),
         )
+        used_template_fallback = True
         break
+    if surrendering and surrender_streak < 2:
+        question_text = (
+            f"Let's try one more concrete angle first: what is one practical use of {concept_row.name}?"
+        )
+
+    if used_template_fallback:
+        logger.info(
+            "probe_turn: template fallback session_id=%s concept_id=%s "
+            "guardrail_triggered=%s repetition_triggered=%s",
+            session_uuid,
+            concept_uuid,
+            guard_triggered,
+            repetition_triggered,
+        )
 
     elapsed = time.perf_counter() - t0
     TURN_LATENCY.observe(elapsed)
@@ -447,6 +522,10 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
         "last_classifier_state": cr.state,
         "last_classifier_confidence": cr.confidence,
         "session_stats": stats,
+        "surrender_streak": surrender_streak,
+        "learning_level": learning_level,
+        "got_it_streak": got_it_streak,
+        "stuck_turn_streak": stuck_turn_streak,
         "phase": "PROBE",
         "force_reveal": False,
     }
@@ -531,20 +610,35 @@ async def reflect_consolidate(state: TeachingState, config: RunnableConfig) -> d
     rating = int(rating)
     session_uuid = uuid.UUID(state["session_id"])
     concept_uuid = uuid.UUID(state["concept_id"])
-    concept_row = (await db.execute(select(Concept).where(Concept.id == concept_uuid))).scalar_one()
+    concept_row = (await db.execute(select(Concept).where(Concept.id == concept_uuid))).scalar_one_or_none()
+    if concept_row is None:
+        logger.error("Reflect failed: concept not found session=%s concept=%s", session_uuid, concept_uuid)
+        raise ValueError("Concept not found while consolidating reflection.")
     assets = state.get("reveal_assets") or {}
     ideal = str(assets.get("ideal_answer") or "")
     conf = float(state.get("last_classifier_confidence") or 0.0)
     gap = float(rating) - conf * 5.0
     SELF_RATING_GAP.observe(gap)
-
-    q = await generate_consolidation_question(
-        db,
+    settings = get_settings()
+    logger.debug(
+        "Reflect consolidate session=%s rating=%s backend=%s generation_model=%s",
         session_uuid,
-        concept_name=concept_row.name,
-        ideal_answer=ideal,
-        self_rating=rating,
+        rating,
+        settings.generation_backend,
+        settings.generation_model_id,
     )
+
+    try:
+        q = await generate_consolidation_question(
+            db,
+            session_uuid,
+            concept_name=concept_row.name,
+            ideal_answer=ideal,
+            self_rating=rating,
+        )
+    except Exception:
+        logger.exception("Consolidation question generation failed session=%s", session_uuid)
+        q = f"In your own words, what is the main idea behind {concept_row.name}?"
     await _sync_teaching_row(db, session_uuid, phase="CONSOLIDATE", self_rating=rating)
     await db.flush()
     PHASE_TRANSITIONS.labels(from_phase="REFLECT", to_phase="CONSOLIDATE").inc()

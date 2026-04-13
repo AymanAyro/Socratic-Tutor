@@ -95,10 +95,19 @@ body {
   overflow: hidden;
 }
 
-.turn-card-header, .turn-student, .turn-tutor, .turn-gap { padding: 2.5mm; }
+.turn-card-header, .turn-student, .turn-correct, .turn-diagram, .turn-tutor, .turn-gap { padding: 2.5mm; }
 .turn-card-header { background: var(--color-surface); }
 .turn-role { color: var(--color-muted); font-size: 8.5pt; display: block; margin-bottom: 1mm; }
 .turn-gap { background: #fff8e6; border-top: 1pt solid #f3df9b; }
+.turn-correct { background: #eef8ff; border-top: 1pt solid #d3e7ff; }
+.turn-diagram { border-top: 1pt solid var(--color-border); }
+.diagram-fallback {
+  border: 1pt dashed var(--color-border);
+  border-radius: 6pt;
+  padding: 2.5mm;
+  color: var(--color-muted);
+  background: #f8f9fc;
+}
 
 .insight-callout {
   border-left: 3pt solid var(--color-accent);

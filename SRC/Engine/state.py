@@ -47,6 +47,10 @@ class TeachingState(TypedDict, total=False):
     background_dispatched: Annotated[bool, or_bool]
     reveal_assets: Annotated[dict[str, Any], merge_dict]
     session_stats: Annotated[dict[str, Any], merge_dict]
+    surrender_streak: int
+    learning_level: str
+    got_it_streak: int
+    stuck_turn_streak: int
     consolidate_attempts: int
     last_consolidate_state: str
     consolidation_question: str

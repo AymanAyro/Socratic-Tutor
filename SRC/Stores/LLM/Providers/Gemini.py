@@ -8,6 +8,12 @@ from Stores.LLM.langchain_factory import build_chat_gemini, get_langchain_embedd
 from config import get_settings
 
 
+def _require_system(system: str | None) -> str:
+    if not system or not system.strip():
+        raise ValueError("System instructions are required for LLM generation.")
+    return system.strip()
+
+
 def _stringify_lc_content(content: Any) -> str:
     """Normalize LangChain message content (str or list of text blocks from Gemini/Gemma)."""
     if content is None:
@@ -67,9 +73,9 @@ class GeminiClient:
     ) -> tuple[str, int]:
         mid = model or self._settings.generation_model_id
         chat = build_chat_gemini(mid, json_mode=json_mode)
+        system_text = _require_system(system)
         messages = []
-        if system:
-            messages.append(SystemMessage(content=system))
+        messages.append(SystemMessage(content=system_text))
         messages.append(HumanMessage(content=prompt))
 
         def _run() -> tuple[str, int]:
@@ -88,9 +94,9 @@ class GeminiClient:
     ) -> AsyncIterator[str]:
         mid = model or self._settings.generation_model_id
         chat = build_chat_gemini(mid, json_mode=False)
+        system_text = _require_system(system)
         messages = []
-        if system:
-            messages.append(SystemMessage(content=system))
+        messages.append(SystemMessage(content=system_text))
         messages.append(HumanMessage(content=prompt))
 
         def _collect() -> list[str]:

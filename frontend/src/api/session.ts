@@ -2,6 +2,18 @@ import { apiUrl, parseSSE } from "./client";
 
 export type SessionMode = "socratic" | "exam_prep";
 
+async function readApiError(response: Response): Promise<string> {
+  const body = await response.text();
+  if (!body) return `HTTP ${response.status}`;
+  try {
+    const parsed = JSON.parse(body) as { detail?: unknown };
+    if (typeof parsed.detail === "string" && parsed.detail.trim()) return parsed.detail;
+  } catch {
+    // non-JSON response body, return raw text
+  }
+  return body;
+}
+
 export async function startSession(body: {
   concept_id: string;
   user_id?: string | null;
@@ -204,7 +216,7 @@ export async function submitReflect(sessionId: string, rating: number): Promise<
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ rating }),
   });
-  if (!r.ok) throw new Error(await r.text());
+  if (!r.ok) throw new Error(await readApiError(r));
   return r.json();
 }
 

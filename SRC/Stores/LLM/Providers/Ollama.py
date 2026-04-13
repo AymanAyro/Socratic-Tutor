@@ -7,6 +7,12 @@ from Stores.LLM.langchain_factory import chat_model_for
 from config import get_settings
 
 
+def _require_system(system: str | None) -> str:
+    if not system or not system.strip():
+        raise ValueError("System instructions are required for LLM generation.")
+    return system.strip()
+
+
 def _usage_tokens(msg) -> int:
     um = getattr(msg, "usage_metadata", None) or {}
     return int(
@@ -40,9 +46,9 @@ class OllamaClient:
     ) -> tuple[str, int]:
         mid = model or self._settings.generation_model_id
         chat = chat_model_for(model_id=mid, json_mode=json_mode)
+        system_text = _require_system(system)
         messages = []
-        if system:
-            messages.append(SystemMessage(content=system))
+        messages.append(SystemMessage(content=system_text))
         messages.append(HumanMessage(content=prompt))
 
         def _run() -> tuple[str, int]:
@@ -60,9 +66,9 @@ class OllamaClient:
     ) -> AsyncIterator[str]:
         mid = model or self._settings.generation_model_id
         chat = chat_model_for(model_id=mid, json_mode=False)
+        system_text = _require_system(system)
         messages = []
-        if system:
-            messages.append(SystemMessage(content=system))
+        messages.append(SystemMessage(content=system_text))
         messages.append(HumanMessage(content=prompt))
 
         def _collect() -> list[str]:

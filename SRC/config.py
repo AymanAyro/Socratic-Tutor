@@ -18,6 +18,27 @@ class Settings(BaseSettings):
         default="",
         validation_alias=AliasChoices("GEMINI_API_KEY", "GOOGLE_API_KEY"),
     )
+    # Gemini “thinking” / reasoning tokens (API: https://ai.google.dev/gemini-api/docs/thinking )
+    # - 2.5 Flash / Flash-Lite: thinking_budget=0 disables thinking (fastest). -1 = dynamic API behavior.
+    # - 2.5 Pro: thinking cannot be fully disabled; avoid 0 or use another model.
+    # - Gemini 3+: set gemini_thinking_level (e.g. minimal, low) instead; if set, thinking_budget is not sent.
+    gemini_thinking_budget: int | None = Field(
+        default=1,
+        validation_alias=AliasChoices("GEMINI_THINKING_BUDGET"),
+    )
+    gemini_thinking_level: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("GEMINI_THINKING_LEVEL"),
+    )
+    llm_temperature: float = Field(default=0.3, validation_alias=AliasChoices("LLM_TEMPERATURE"))
+    llm_top_p: float = Field(default=0.9, validation_alias=AliasChoices("LLM_TOP_P"))
+    llm_top_k: int | None = Field(default=40, validation_alias=AliasChoices("LLM_TOP_K"))
+    llm_max_output_tokens: int | None = Field(
+        default=1024, validation_alias=AliasChoices("LLM_MAX_OUTPUT_TOKENS")
+    )
+    llm_repeat_penalty: float | None = Field(
+        default=1.05, validation_alias=AliasChoices("LLM_REPEAT_PENALTY")
+    )
 
     # GCP / Vertex (optional; when set, Gemini uses Vertex instead of API key)
     google_cloud_project: str = ""
@@ -54,6 +75,13 @@ class Settings(BaseSettings):
     # Stage 2 — LangGraph teaching phases (single-concept arc)
     enable_stage2_graph: bool = False
     langgraph_checkpoint_backend: str = "postgres"  # postgres | memory
+    # psycopg checkpoint pool (main.py): TCP keepalives + idle recycle reduce dropped conns (e.g. Win 10053, Docker NAT).
+    langgraph_checkpoint_tcp_keepalive: bool = True
+    langgraph_checkpoint_keepalives_idle: int = 30
+    langgraph_checkpoint_keepalives_interval: int = 10
+    langgraph_checkpoint_keepalives_count: int = 3
+    # 0 = use psycopg_pool default max_idle (600s). Lower values recycle pooled connections sooner.
+    langgraph_checkpoint_pool_max_idle_seconds: float = 180.0
     min_probe_turns: int = 5
     max_probe_turns_default: int = 5
     mastery_confidence_threshold: float = 0.85

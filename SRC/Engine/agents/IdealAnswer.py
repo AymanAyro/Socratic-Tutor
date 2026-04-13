@@ -17,14 +17,10 @@ attempted to answer questions about the following concept.
 
 Your answer must:
 - Be complete and correct, grounded only in the provided source material
-- Be appropriate for difficulty tier {difficulty}/5
+- Be appropriate for the requested difficulty tier
 - Be structured: one clear statement of the core idea, then supporting explanation
 - Be concise: 100-200 words maximum
 - NOT reference the student's attempt or the Socratic dialogue
-
-Concept: {concept}
-Source material: {rag_context}
-
 Write the model answer only. No preamble."""
 
 
@@ -51,14 +47,16 @@ async def generate_ideal_answer(
         logger.exception("RAG for ideal answer failed")
         rag_context = ""
     rag_context = ContextManager().truncate_to_budget(rag_context, 3200)
-    system = IDEAL_ANSWER_SYSTEM.format(
-        difficulty=max(1, min(5, difficulty)),
-        concept=concept.name,
-        rag_context=rag_context or "(no retrieved chunks)",
+    system = IDEAL_ANSWER_SYSTEM
+    user_prompt = (
+        f"Concept: {concept.name}\n"
+        f"Requested difficulty tier: {max(1, min(5, difficulty))}/5\n"
+        f"Source material:\n{rag_context or '(no retrieved chunks)'}\n\n"
+        "Write the model answer now."
     )
     gen = get_generation_client()
     text, _ = await gen.generate(
-        prompt="Write the model answer now.",
+        prompt=user_prompt,
         system=system,
         model=settings.generation_model_id,
     )

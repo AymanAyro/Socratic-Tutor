@@ -3,6 +3,7 @@ import { apiUrl } from "./client";
 export async function fetchMastery(userId: string): Promise<
   {
     concept_id: string;
+    concept_name?: string | null;
     score: number;
     repetitions: number;
     easiness_factor: number;
@@ -15,7 +16,7 @@ export async function fetchMastery(userId: string): Promise<
 }
 
 export async function fetchDue(userId: string): Promise<
-  { concept_id: string; name: string; next_review_date: string }[]
+  { concept_id: string; name: string; next_review_date: string; score?: number | null }[]
 > {
   const r = await fetch(apiUrl(`/progress/due?user_id=${encodeURIComponent(userId)}`));
   if (!r.ok) throw new Error(await r.text());

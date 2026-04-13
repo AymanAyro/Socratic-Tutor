@@ -55,7 +55,7 @@ export default function DocumentList() {
               >
                 <span className="font-medium">{d.title}</span>
                 <span className="ml-2 text-xs text-ink-400">
-                  {d.chunk_count} chunks &middot; {d.source_type}
+                  {d.chunk_count > 0 ? `${d.chunk_count} chunks` : "Ready to ingest"} &middot; {d.source_type}
                 </span>
               </button>
               <motion.button
@@ -63,6 +63,7 @@ export default function DocumentList() {
                 whileTap={{ scale: 0.9 }}
                 type="button"
                 title="Delete document"
+                aria-label={`Delete document ${d.title}`}
                 onClick={() => {
                   if (confirm(`Delete "${d.title}" and all its data?`))
                     deleteMut.mutate(d.id);

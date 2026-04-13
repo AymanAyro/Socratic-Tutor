@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Session Report - {{ session.concept_name }}</title>
-  <link rel="stylesheet" href="style.css">
+  <style>{{ inline_css | safe }}</style>
 </head>
 <body>
 <header class="report-header">
@@ -86,16 +86,22 @@
       <span class="turn-role">Your answer</span>
       <p>{{ turn.student_input }}</p>
     </div>
+    <div class="turn-correct">
+      <span class="turn-role">Correct answer</span>
+      <p>{{ turn.correct_answer or "Correct answer unavailable for this turn." }}</p>
+    </div>
+    <div class="turn-diagram">
+      <span class="turn-role">Diagram</span>
+      {% if turn.diagram_svg %}
+      <div class="diagram-container">{{ turn.diagram_svg | safe }}</div>
+      {% else %}
+      <div class="diagram-fallback">Diagram unavailable</div>
+      {% endif %}
+    </div>
     <div class="turn-tutor">
       <span class="turn-role">Tutor's next question</span>
       <p class="turn-question">{{ turn.question_generated }}</p>
     </div>
-    {% if turn.gap %}
-    <div class="turn-gap">
-      <span class="turn-role">What was missing</span>
-      <p>{{ turn.gap }}</p>
-    </div>
-    {% endif %}
   </div>
   {% endfor %}
 </section>

@@ -6,6 +6,7 @@ type Props = {
   conceptId: string | null;
   idealAnswer: string;
   diagramSvg: string | null;
+  isActive: boolean;
   onGotIt: () => void;
 };
 
@@ -14,6 +15,7 @@ export default function RevealPanel({
   conceptId,
   idealAnswer,
   diagramSvg,
+  isActive,
   onGotIt,
 }: Props) {
   const [svg, setSvg] = useState<string | null>(diagramSvg);
@@ -24,11 +26,12 @@ export default function RevealPanel({
     let cancelled = false;
     setSvg(diagramSvg);
     setUnavailable(false);
-    if (diagramSvg || !conceptId) {
+    if (!isActive || diagramSvg || !conceptId) {
       setLoading(false);
       return;
     }
     setLoading(true);
+    const maxAttempts = 10;
     let attempts = 0;
     const timer = setInterval(async () => {
       attempts += 1;
@@ -38,20 +41,22 @@ export default function RevealPanel({
           setSvg(result);
           setLoading(false);
           clearInterval(timer);
+          return;
         }
       } catch {
-        if (attempts >= 10 && !cancelled) {
-          setLoading(false);
-          setUnavailable(true);
-          clearInterval(timer);
-        }
+        // Ignore transient fetch failures until max attempts are reached.
+      }
+      if (attempts >= maxAttempts && !cancelled) {
+        setLoading(false);
+        setUnavailable(true);
+        clearInterval(timer);
       }
     }, 1000);
     return () => {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [sessionId, conceptId, diagramSvg]);
+  }, [sessionId, conceptId, diagramSvg, isActive]);
 
   return (
     <div className="rounded-xl border border-border bg-surface p-4 space-y-4">

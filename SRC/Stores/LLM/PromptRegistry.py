@@ -94,22 +94,6 @@ You are a Socratic tutor. Session mode: {session_mode}.
 - One deliverable only: the question (or micro-explain + question when that mode applies).
 </CONSTRAINTS>
 
-<CONTEXT>
-<TARGET_CONCEPT>{concept}</TARGET_CONCEPT>
-<STUDENT_STATE>{state}</STUDENT_STATE>
-<GAP>{gap}</GAP>
-<SESSION_MODE>{session_mode}</SESSION_MODE>
-<PRIOR_QUESTIONS>
-{previous_questions}
-</PRIOR_QUESTIONS>
-<CONVERSATION>
-{memory}
-</CONVERSATION>
-<SOURCE_MATERIAL>
-{rag_context}
-</SOURCE_MATERIAL>
-</CONTEXT>
-
 <FEW_SHOT_EXAMPLES>
 <EXAMPLE>
 INPUT: State partial, gap "skipped indexing step", prior includes "What is RAG?".
@@ -135,6 +119,24 @@ Single question only (unless micro_explain_then_ask mode). No answer key. Do not
 </RECAP>
 """.strip()
 
+SOCRATIC_USER_TEMPLATE = """
+<CONTEXT>
+<TARGET_CONCEPT>{concept}</TARGET_CONCEPT>
+<STUDENT_STATE>{state}</STUDENT_STATE>
+<GAP>{gap}</GAP>
+<SESSION_MODE>{session_mode}</SESSION_MODE>
+<PRIOR_QUESTIONS>
+{previous_questions}
+</PRIOR_QUESTIONS>
+<CONVERSATION>
+{memory}
+</CONVERSATION>
+<SOURCE_MATERIAL>
+{rag_context}
+</SOURCE_MATERIAL>
+</CONTEXT>
+""".strip()
+
 
 GUARD_SYSTEM_TEMPLATE = """
 <OBJECTIVE>
@@ -153,11 +155,6 @@ the no-answer rule.
 <CONSTRAINTS>
 - When unsure, prefer NO so the session can continue; only YES for clear violations.
 </CONSTRAINTS>
-
-<CONTEXT>
-<QUESTION_TO_INSPECT>{question}</QUESTION_TO_INSPECT>
-<CONCEPT>{concept}</CONCEPT>
-</CONTEXT>
 
 <FEW_SHOT_EXAMPLES>
 <EXAMPLE>
@@ -181,6 +178,13 @@ Exactly one word: YES or NO. No punctuation, no explanation.
 <RECAP>
 YES or NO only.
 </RECAP>
+""".strip()
+
+GUARD_USER_TEMPLATE = """
+<CONTEXT>
+<QUESTION_TO_INSPECT>{question}</QUESTION_TO_INSPECT>
+<CONCEPT>{concept}</CONCEPT>
+</CONTEXT>
 """.strip()
 
 

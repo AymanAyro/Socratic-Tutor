@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from Models.Content import Concept
-from Stores.LLM.PromptRegistry import SOCRATIC_SYSTEM_TEMPLATE, PromptRegistry
+from Stores.LLM.PromptRegistry import SOCRATIC_SYSTEM_TEMPLATE, SOCRATIC_USER_TEMPLATE, PromptRegistry
 from Stores.LLM.factory import get_generation_client
 from Stores.VectorStore import VectorStore
 from Utils.ContextManager import ContextManager, TurnLike
@@ -117,8 +117,12 @@ class QuestionGenerator:
         registry = PromptRegistry(self._db)
         resolved = await registry.get_prompt("socratic", session_id)
         template = resolved.template if resolved.template else SOCRATIC_SYSTEM_TEMPLATE
-        system = _fill_prompt_template(
-            template,
+        system = _fill_prompt_template(template, session_mode=session_mode)
+        mode_instruction = self._mode_instruction(mode)
+        if mode_instruction:
+            system = mode_instruction + "\n\n" + system
+        user_context = _fill_prompt_template(
+            SOCRATIC_USER_TEMPLATE,
             concept=concept.name,
             state=state,
             gap=gap or "null",
@@ -127,9 +131,9 @@ class QuestionGenerator:
             previous_questions=previous_questions,
             session_mode=session_mode,
         )
-        system = self._mode_instruction(mode) + "\n\n" + system
         prompt = (
-            f'Student just said:\n"""{student_answer}"""\n'
+            f"{user_context}\n\n"
+            f'<LATEST_STUDENT_MESSAGE>\n"""{student_answer}"""\n</LATEST_STUDENT_MESSAGE>\n\n'
             "Produce only your next single question (or micro-explain+question if MODE_LINE says so)."
         )
         try:
@@ -163,8 +167,12 @@ class QuestionGenerator:
         registry = PromptRegistry(self._db)
         resolved = await registry.get_prompt("socratic", session_id)
         template = resolved.template if resolved.template else SOCRATIC_SYSTEM_TEMPLATE
-        system = _fill_prompt_template(
-            template,
+        system = _fill_prompt_template(template, session_mode=session_mode)
+        mode_instruction = self._mode_instruction("probe_gap")
+        if mode_instruction:
+            system = mode_instruction + "\n\n" + system
+        user_context = _fill_prompt_template(
+            SOCRATIC_USER_TEMPLATE,
             concept=concept.name,
             state="partial",
             gap="null",
@@ -173,8 +181,7 @@ class QuestionGenerator:
             previous_questions="(none — you are composing the opening question only.)",
             session_mode=session_mode,
         )
-        system = self._mode_instruction("probe_gap") + "\n\n" + system
-        prompt = "Ask exactly one opening Socratic question to begin the session."
+        prompt = f"{user_context}\n\nAsk exactly one opening Socratic question to begin the session."
         try:
             async for chunk in self._gen.generate_stream(prompt, system=system):
                 yield chunk

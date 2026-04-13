@@ -39,6 +39,8 @@ class ReportComposer:
             autoescape=jinja2.select_autoescape(["html", "xml"]),
         )
         template = env.get_template("session_report.html")
+        css_path = self._template_dir / "style.css"
+        inline_css = css_path.read_text(encoding="utf-8") if css_path.is_file() else ""
         display_labels = {
             "correct": "Got it",
             "partial": "Getting there",
@@ -50,7 +52,7 @@ class ReportComposer:
                 "student_input": t.student_input,
                 "question_generated": t.question_generated,
                 "classifier_state": t.classifier_state,
-                "gap": t.clarification,
+                "correct_answer": t.clarification,
                 "diagram_svg": t.diagram_svg,
             }
             for t in turns
@@ -77,10 +79,10 @@ class ReportComposer:
             },
             "review_schedule": review_schedule or [],
             "DISPLAY_LABELS": display_labels,
+            "inline_css": inline_css,
         }
         html_str = template.render(**ctx)
         out_path = self._output_dir / f"{session_id}.pdf"
-        css_path = self._template_dir / "style.css"
         t0 = time.perf_counter()
 
         try:
@@ -92,7 +94,7 @@ class ReportComposer:
             PDF_GENERATION_LATENCY.observe(time.perf_counter() - t0)
             return str(html_path)
 
-        stylesheets = [CSS(filename=str(css_path))] if css_path.is_file() else []
+        stylesheets = [CSS(string=inline_css)] if inline_css else []
 
         def _write() -> None:
             HTML(string=html_str, base_url=str(self._template_dir)).write_pdf(

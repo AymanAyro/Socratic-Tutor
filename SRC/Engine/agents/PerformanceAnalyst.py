@@ -13,14 +13,6 @@ logger = logging.getLogger(__name__)
 ANALYST_SYSTEM = """You are an educational performance analyst. Analyse this session and produce
 a structured JSON assessment.
 
-Session data:
-- Concepts covered: {concepts}
-- Per-concept probe turns: {probe_turns_per_concept}
-- Classifier state sequences: {classifier_sequences}
-- Self-ratings vs classifier confidence: {rating_gap}
-- Escape hatch activations: {escape_hatch_count}
-- Mastery scores before and after: {mastery_delta}
-
 Output a JSON object with exactly these fields:
 {{
   "overall_performance": "struggling" | "developing" | "solid" | "strong",
@@ -54,17 +46,20 @@ async def analyse_session_performance(
     payload: dict,
 ) -> dict:
     settings = get_settings()
-    system = ANALYST_SYSTEM.format(
-        concepts=json.dumps(payload.get("concepts", [])),
-        probe_turns_per_concept=json.dumps(payload.get("probe_turns_per_concept", {})),
-        classifier_sequences=json.dumps(payload.get("classifier_sequences", {})),
-        rating_gap=json.dumps(payload.get("rating_gap", {})),
-        escape_hatch_count=str(payload.get("escape_hatch_count", 0)),
-        mastery_delta=json.dumps(payload.get("mastery_delta", {})),
+    system = ANALYST_SYSTEM
+    prompt = (
+        "Session data:\n"
+        f"- Concepts covered: {json.dumps(payload.get('concepts', []))}\n"
+        f"- Per-concept probe turns: {json.dumps(payload.get('probe_turns_per_concept', {}))}\n"
+        f"- Classifier state sequences: {json.dumps(payload.get('classifier_sequences', {}))}\n"
+        f"- Self-ratings vs classifier confidence: {json.dumps(payload.get('rating_gap', {}))}\n"
+        f"- Escape hatch activations: {payload.get('escape_hatch_count', 0)}\n"
+        f"- Mastery scores before and after: {json.dumps(payload.get('mastery_delta', {}))}\n\n"
+        "Respond with JSON only."
     )
     gen = get_generation_client()
     text, _ = await gen.generate(
-        prompt="Respond with JSON only.",
+        prompt=prompt,
         system=system,
         model=settings.generation_model_id,
         json_mode=True,

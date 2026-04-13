@@ -12,15 +12,25 @@ from Models.Schemas import DueConceptOut, MasteryOut, ProgressHistoryOut
 class ProgressController:
     async def mastery_for_user(self, db: AsyncSession, user_id: uuid.UUID) -> list[MasteryOut]:
         rows = (
-            (
-                await db.execute(
-                    select(MasteryScore).where(MasteryScore.user_id == user_id)
+            await db.execute(
+                select(MasteryScore, Concept)
+                .join(Concept, Concept.id == MasteryScore.concept_id)
+                .where(MasteryScore.user_id == user_id)
+            )
+        ).all()
+        out: list[MasteryOut] = []
+        for mastery, concept in rows:
+            out.append(
+                MasteryOut(
+                    concept_id=mastery.concept_id,
+                    concept_name=concept.name,
+                    score=mastery.score,
+                    repetitions=mastery.repetitions,
+                    easiness_factor=mastery.easiness_factor,
+                    next_review_date=mastery.next_review_date,
                 )
             )
-            .scalars()
-            .all()
-        )
-        return [MasteryOut.model_validate(r) for r in rows]
+        return out
 
     async def due_concepts(self, db: AsyncSession, user_id: uuid.UUID) -> list[DueConceptOut]:
         today = date.today()
@@ -45,6 +55,7 @@ class ProgressController:
                     concept_id=c.id,
                     name=c.name,
                     next_review_date=ms.next_review_date,  # type: ignore[arg-type]
+                    score=float(ms.score or 0.0),
                 )
             )
         return out

@@ -23,6 +23,23 @@ logger = logging.getLogger(__name__)
 _access = logging.getLogger(ACCESS_LOGGER_NAME)
 
 
+def _langgraph_checkpoint_pool_kwargs(settings):
+    """Connection kwargs for AsyncConnectionPool (libpq TCP keepalives)."""
+    from psycopg.rows import dict_row
+
+    kw: dict = {
+        "autocommit": True,
+        "prepare_threshold": 0,
+        "row_factory": dict_row,
+    }
+    if settings.langgraph_checkpoint_tcp_keepalive:
+        kw["keepalives"] = 1
+        kw["keepalives_idle"] = settings.langgraph_checkpoint_keepalives_idle
+        kw["keepalives_interval"] = settings.langgraph_checkpoint_keepalives_interval
+        kw["keepalives_count"] = settings.langgraph_checkpoint_keepalives_count
+    return kw
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
@@ -31,16 +48,27 @@ async def lifespan(app: FastAPI):
     app.state.stage2_asset_store = {}
     app.state.checkpoint_pool = None
     if settings.langgraph_checkpoint_backend.lower() == "postgres":
-        from psycopg.rows import dict_row
         from psycopg_pool import AsyncConnectionPool
         from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-        pool = AsyncConnectionPool(
-            conninfo=settings.postgres_checkpoint_conninfo,
-            kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
-            open=True,
-            min_size=1,
-            max_size=10,
+        conn_kw = _langgraph_checkpoint_pool_kwargs(settings)
+        pool_args: dict = {
+            "conninfo": settings.postgres_checkpoint_conninfo,
+            "kwargs": conn_kw,
+            "open": True,
+            "min_size": 1,
+            "max_size": 10,
+        }
+        if settings.langgraph_checkpoint_pool_max_idle_seconds > 0:
+            pool_args["max_idle"] = settings.langgraph_checkpoint_pool_max_idle_seconds
+        pool = AsyncConnectionPool(**pool_args)
+        logger.info(
+            "LangGraph checkpoint pool: tcp_keepalive=%s keepalives_idle=%s interval=%s count=%s max_idle=%s",
+            settings.langgraph_checkpoint_tcp_keepalive,
+            conn_kw.get("keepalives_idle", "—"),
+            conn_kw.get("keepalives_interval", "—"),
+            conn_kw.get("keepalives_count", "—"),
+            pool_args.get("max_idle", "default"),
         )
         checkpointer = AsyncPostgresSaver(pool)
         await checkpointer.setup()

@@ -166,6 +166,7 @@ class SessionHistoryItem(BaseModel):
 
 class MasteryOut(BaseModel):
     concept_id: uuid.UUID
+    concept_name: str | None = None
     score: float
     repetitions: int
     easiness_factor: float
@@ -178,6 +179,7 @@ class DueConceptOut(BaseModel):
     concept_id: uuid.UUID
     name: str
     next_review_date: date
+    score: float | None = None
 
 
 class ProgressHistoryOut(BaseModel):

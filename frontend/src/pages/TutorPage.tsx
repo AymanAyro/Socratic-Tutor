@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   endSession,
@@ -40,6 +40,15 @@ const DISPLAY_LABELS: Record<string, string> = {
   stuck: "Still working on it",
 };
 
+/** Lets React commit `typing` and paint before we await network/SSE (avoids instant hide). */
+function yieldToPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  });
+}
+
+const MIN_TYPING_INDICATOR_MS = 500;
+
 export default function TutorPage() {
   const navigate = useNavigate();
   const {
@@ -49,6 +58,7 @@ export default function TutorPage() {
     messages,
     userId,
     setUserId,
+    setConceptId,
     setSessionId,
     setSessionName,
     appendMessage,
@@ -75,6 +85,15 @@ export default function TutorPage() {
   const [reportReadyUrl, setReportReadyUrl] = useState<string | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [insightPanelOpen, setInsightPanelOpen] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [showRevealDivider, setShowRevealDivider] = useState(false);
+  const [resumedSession, setResumedSession] = useState(false);
+  const [resumeBannerDismissed, setResumeBannerDismissed] = useState(false);
+  const [phaseHydrated, setPhaseHydrated] = useState(false);
+  const [phaseHydrateError, setPhaseHydrateError] = useState(false);
+  const [typingEpoch, setTypingEpoch] = useState(0);
+  const typingStartedAtRef = useRef(0);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const turnsQ = useQuery({
     queryKey: ["turns", sessionId],
@@ -105,6 +124,7 @@ export default function TutorPage() {
       resetChat();
       setSessionId(data.session_id);
       setSessionName(data.session_name);
+      setConceptId(String(data.concept_id));
       setActiveMode(data.session_mode);
       setExamLive(null);
       setExamFinal(null);
@@ -114,6 +134,19 @@ export default function TutorPage() {
       setRevealContent(null);
       setPhaseMeta(null);
       setReportReadyUrl(null);
+      setShowRevealDivider(false);
+      setSendError(null);
+      setResumedSession(false);
+      setResumeBannerDismissed(false);
+      setPhaseHydrateError(false);
+      try {
+        localStorage.setItem("st_use_stage2", String(!!data.use_stage2));
+        localStorage.setItem("st_session_mode", data.session_mode);
+        const ph = data.teaching_phase ?? (data.use_stage2 ? "PROBE" : "");
+        if (ph) localStorage.setItem("st_teaching_phase", ph);
+      } catch {
+        /* ignore */
+      }
       appendMessage({ role: "tutor", text: data.opening_question });
     },
   });
@@ -135,22 +168,48 @@ export default function TutorPage() {
     },
   });
 
+  const canSendFreeText =
+    !stage2Active || !sessionId || teachingPhase === "PROBE" || teachingPhase === "CONSOLIDATE";
+
+  const blockedPhaseHint =
+    stage2Active && sessionId && !canSendFreeText
+      ? teachingPhase === "REFLECT"
+        ? "Use the reflection rating (1-5) above to continue."
+        : teachingPhase === "REVEAL"
+          ? "Review the model answer and click Got it to continue."
+          : "Wait for the next step in this phase."
+      : null;
+
   const send = async (text: string) => {
-    if (!sessionId) return;
+    if (!sessionId || !canSendFreeText) return;
     appendMessage({ role: "student", text });
+    typingStartedAtRef.current = Date.now();
+    setTypingEpoch((n) => n + 1);
     setTyping(true);
     setRegen(false);
+    setSendError(null);
+    await yieldToPaint();
     let tutorStarted = false;
     let revealMode = false;
+    let responseStarted = false;
+    const markResponseStarted = () => {
+      if (!responseStarted) {
+        responseStarted = true;
+        const elapsed = Date.now() - typingStartedAtRef.current;
+        const rest = Math.max(0, MIN_TYPING_INDICATOR_MS - elapsed);
+        window.setTimeout(() => setTyping(false), rest);
+      }
+    };
     try {
       await streamTurn(sessionId, text, {
         onToken: (chunk) => {
+          if (chunk.length > 0) markResponseStarted();
           if (!revealMode) {
-            if (!tutorStarted) {
+            if (!tutorStarted && chunk.trim().length > 0) {
               tutorStarted = true;
               appendMessage({ role: "tutor", text: "" });
             }
-            appendTutorChunk(chunk);
+            if (tutorStarted) appendTutorChunk(chunk);
           }
         },
         onMeta: (meta) => {
@@ -169,10 +228,13 @@ export default function TutorPage() {
         },
         onRegenerating: () => setRegen(true),
         onRevealStart: () => {
+          markResponseStarted();
           revealMode = true;
+          setShowRevealDivider(true);
           appendMessage({ role: "tutor", text: "" });
         },
         onRevealChunk: (c) => {
+          if (c.length > 0) markResponseStarted();
           appendTutorChunk(c);
         },
         onRevealDone: (payload) => {
@@ -205,8 +267,40 @@ export default function TutorPage() {
           /* ignore */
         }
       }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to fetch tutor response.";
+      setSendError(message);
+      appendMessage({ role: "tutor", text: `I hit a temporary issue: ${message}` });
+      if (message.includes("does not accept a free-text answer")) {
+        try {
+          const ph = await fetchSessionPhase(sessionId);
+          setTeachingPhase(ph.phase);
+          setPhaseMeta({ probe_turns: ph.probe_turns, max_probe_turns: ph.max_probe_turns });
+          if (ph.last_reveal?.ideal_answer) {
+            setRevealContent({
+              idealAnswer: String(ph.last_reveal.ideal_answer ?? ""),
+              diagramSvg:
+                typeof ph.last_reveal.concept_diagram_svg === "string"
+                  ? ph.last_reveal.concept_diagram_svg
+                  : null,
+              conceptId: typeof ph.last_reveal.concept_id === "string" ? ph.last_reveal.concept_id : null,
+            });
+          } else {
+            setRevealContent(null);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
     } finally {
-      setTyping(false);
+      if (!responseStarted) {
+        const elapsed = Date.now() - typingStartedAtRef.current;
+        const rest = Math.max(0, MIN_TYPING_INDICATOR_MS - elapsed);
+        if (rest > 0) {
+          await new Promise((r) => setTimeout(r, rest));
+        }
+        setTyping(false);
+      }
     }
   };
 
@@ -226,22 +320,90 @@ export default function TutorPage() {
   };
 
   useEffect(() => {
-    if (!stage2Active || !sessionId) return;
+    if (sessionId && messages.length > 0) {
+      setResumedSession(true);
+    }
+  }, [sessionId, messages.length]);
+
+  /** Reload: restore Stage 2 phase + UI from API (stage2Active was false, so phase was never fetched before). */
+  useEffect(() => {
+    if (!sessionId) {
+      setPhaseHydrated(false);
+      setPhaseHydrateError(false);
+      setActiveMode(null);
+      return;
+    }
+
+    const storedMode = localStorage.getItem("st_session_mode");
+    if (storedMode === "socratic" || storedMode === "exam_prep") {
+      setActiveMode(storedMode);
+    }
+
     let cancelled = false;
+    setPhaseHydrated(false);
+    setPhaseHydrateError(false);
+
     (async () => {
       try {
         const ph = await fetchSessionPhase(sessionId);
         if (cancelled) return;
+        setStage2Active(true);
         setTeachingPhase(ph.phase);
         setPhaseMeta({ probe_turns: ph.probe_turns, max_probe_turns: ph.max_probe_turns });
+        try {
+          localStorage.setItem("st_use_stage2", "true");
+          localStorage.setItem("st_teaching_phase", ph.phase);
+        } catch {
+          /* ignore */
+        }
+        if (ph.phase === "REVEAL" && ph.last_reveal && String(ph.last_reveal.ideal_answer ?? "").trim()) {
+          setRevealContent({
+            idealAnswer: String(ph.last_reveal.ideal_answer ?? ""),
+            diagramSvg:
+              typeof ph.last_reveal.concept_diagram_svg === "string" ? ph.last_reveal.concept_diagram_svg : null,
+            conceptId: typeof ph.last_reveal.concept_id === "string" ? ph.last_reveal.concept_id : null,
+          });
+        } else if (ph.phase !== "REVEAL") {
+          setRevealContent(null);
+        }
+        if (ph.report_status === "ready") {
+          setReportReadyUrl(reportPdfUrl(sessionId));
+        }
+        setPhaseHydrated(true);
       } catch {
-        /* ignore */
+        if (cancelled) return;
+        const wasStage2 = localStorage.getItem("st_use_stage2") === "true";
+        const fallbackPhase = localStorage.getItem("st_teaching_phase");
+        if (wasStage2) {
+          setStage2Active(true);
+          if (fallbackPhase) setTeachingPhase(fallbackPhase);
+          setPhaseHydrateError(true);
+        } else {
+          setStage2Active(false);
+          setTeachingPhase(null);
+          setPhaseMeta(null);
+        }
+        setPhaseHydrated(true);
       }
     })();
+
     return () => {
       cancelled = true;
     };
-  }, [stage2Active, sessionId]);
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!stage2Active || !teachingPhase) return;
+    try {
+      localStorage.setItem("st_teaching_phase", teachingPhase);
+    } catch {
+      /* ignore */
+    }
+  }, [stage2Active, teachingPhase]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, typing, regen, lastClassState]);
 
   return (
     <div className="space-y-6">
@@ -252,13 +414,24 @@ export default function TutorPage() {
         </p>
       </div>
 
-      {!conceptId && (
+      {!conceptId && !sessionId && (
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           className="rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-sm px-4 py-3"
         >
           Select a concept from the Content page before starting.
+        </motion.div>
+      )}
+      {sessionId && !conceptId && (
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-xl bg-sky-500/10 border border-sky-500/25 text-sky-200 text-sm px-4 py-3"
+        >
+          Session is active but the selected concept was not found in this browser&apos;s storage (e.g. after clearing
+          site data). You can keep going if the chat still works; open{" "}
+          <strong className="text-text">Content</strong> and pick the concept again before starting a new session.
         </motion.div>
       )}
 
@@ -286,6 +459,12 @@ export default function TutorPage() {
             <button
               key={m}
               type="button"
+              title={
+                m === "socratic"
+                  ? "Guided questioning to build understanding."
+                  : "Socratic questions with scoring for exam practice."
+              }
+              aria-label={m === "socratic" ? "Socratic mode" : "Exam prep mode"}
               disabled={!!sessionId}
               onClick={() => setSessionMode(m)}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
@@ -406,9 +585,19 @@ export default function TutorPage() {
               setSessionId(null);
               setSessionName(null);
               setActiveMode(null);
+              setStage2Active(false);
+              setTeachingPhase(null);
+              setPhaseMeta(null);
+              setRevealContent(null);
+              setReportReadyUrl(null);
               setExamLive(null);
               setExamFinal(null);
               setLastClassState(null);
+              setShowRevealDivider(false);
+              setSendError(null);
+              setResumedSession(false);
+              setResumeBannerDismissed(false);
+              setPhaseHydrateError(false);
             }}
           >
             Clear chat
@@ -435,6 +624,26 @@ export default function TutorPage() {
       )}
       {endMut.isError && (
         <p className="text-sm text-red-600">{(endMut.error as Error).message}</p>
+      )}
+      {sendError && <p className="text-sm text-red-600">{sendError}</p>}
+      {resumedSession && !resumeBannerDismissed && (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800 flex flex-wrap items-center justify-between gap-2">
+          <span>Loaded your saved chat from this browser. Phase and controls sync from the server when online.</span>
+          <button
+            type="button"
+            className="shrink-0 text-emerald-900 underline font-medium hover:opacity-80"
+            onClick={() => setResumeBannerDismissed(true)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+      {sessionId && phaseHydrated && phaseHydrateError && stage2Active && (
+        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          Could not sync session phase from the server. Check your connection and refresh. If this persists, your saved
+          phase ({localStorage.getItem("st_teaching_phase") ?? "unknown"}) is shown so you can try reflection or finish
+          when the API is back.
+        </p>
       )}
 
       <AnimatePresence>
@@ -523,43 +732,18 @@ export default function TutorPage() {
         </a>
       )}
 
-      {revealContent && sessionId && (
+      {revealContent && sessionId && teachingPhase === "REVEAL" && (
         <RevealPanel
           sessionId={sessionId}
           conceptId={revealContent.conceptId}
           idealAnswer={revealContent.idealAnswer}
           diagramSvg={revealContent.diagramSvg}
-          onGotIt={() => setTeachingPhase("REFLECT")}
+          isActive={teachingPhase === "REVEAL"}
+          onGotIt={() => {
+            setTeachingPhase("REFLECT");
+            setRevealContent(null);
+          }}
         />
-      )}
-
-      {stage2Active && sessionId && teachingPhase === "REFLECT" && (
-        <div className="rounded-xl border border-accent/30 bg-accent/10 p-3 text-sm">
-          <p className="text-text mb-2">How well do you feel you understood this concept? (1–5)</p>
-          <div className="flex flex-wrap gap-2">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                type="button"
-                className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium hover:border-accent"
-                onClick={async () => {
-                  if (!sessionId) return;
-                  try {
-                    const ph = await submitReflect(sessionId, n);
-                    setTeachingPhase(ph.phase);
-                    if (ph.last_tutor_plain) {
-                      appendMessage({ role: "tutor", text: ph.last_tutor_plain });
-                    }
-                  } catch (e) {
-                    appendMessage({ role: "tutor", text: (e as Error).message });
-                  }
-                }}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-        </div>
       )}
 
       <div
@@ -577,6 +761,11 @@ export default function TutorPage() {
           {teachingPhase && <PhaseBadge phase={teachingPhase} />}
         </div>
         <div className="flex-1 space-y-3 overflow-y-auto max-h-[480px] pr-1">
+          {showRevealDivider && (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-1.5 text-xs font-medium text-emerald-800 text-center">
+              ── Concept Revealed ──
+            </div>
+          )}
           {messages.map((m) =>
             m.role === "tutor" ? (
               <TutorMessage
@@ -592,7 +781,9 @@ export default function TutorPage() {
               <ChatBubble key={m.id} role={m.role} text={m.text} />
             )
           )}
-          {typing && <TypingIndicator />}
+          <AnimatePresence>
+            {typing && <TypingIndicator key={typingEpoch} />}
+          </AnimatePresence>
           {regen && (
             <motion.p
               initial={{ opacity: 0 }}
@@ -611,9 +802,47 @@ export default function TutorPage() {
               </span>
             </div>
           )}
+          <div ref={chatEndRef} />
         </div>
+
+        {stage2Active && sessionId && teachingPhase === "REFLECT" && (
+          <div className="mt-3 rounded-xl border border-accent/40 bg-accent/10 p-3 text-sm shrink-0">
+            <p className="text-text font-medium mb-1">Reflection</p>
+            <p className="text-muted text-xs mb-2">
+              Free text is turned off here. Rate how well you understood this concept (1–5). After that you can answer
+              the consolidation question in the chat, then use <strong className="text-text">Finish Session</strong> to
+              build the PDF report.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  className="rounded-lg border border-border bg-surface px-3 py-2 text-sm font-semibold hover:border-accent min-w-[2.5rem]"
+                  onClick={async () => {
+                    if (!sessionId) return;
+                    try {
+                      const ph = await submitReflect(sessionId, n);
+                      setTeachingPhase(ph.phase);
+                      setPhaseMeta({ probe_turns: ph.probe_turns, max_probe_turns: ph.max_probe_turns });
+                      if (ph.last_tutor_plain) {
+                        appendMessage({ role: "tutor", text: ph.last_tutor_plain });
+                      }
+                    } catch (e) {
+                      appendMessage({ role: "tutor", text: (e as Error).message });
+                    }
+                  }}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-4">
-          <InputBar onSend={send} disabled={!sessionId || typing} />
+          <InputBar onSend={send} disabled={!sessionId || typing || !canSendFreeText} />
+          {blockedPhaseHint && <p className="mt-2 text-xs text-muted">{blockedPhaseHint}</p>}
         </div>
       </div>
       <InsightPanel

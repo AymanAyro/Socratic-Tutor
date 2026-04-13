@@ -48,23 +48,52 @@ def build_chat_ollama(model: str, json_mode: bool = False):
         "model": model,
         "base_url": s.ollama_base_url,
         "timeout": s.llm_request_timeout,
+        "temperature": s.llm_temperature,
+        "top_p": s.llm_top_p,
     }
+    if s.llm_top_k is not None:
+        kwargs["top_k"] = s.llm_top_k
+    if s.llm_max_output_tokens is not None:
+        kwargs["num_predict"] = s.llm_max_output_tokens
+    if s.llm_repeat_penalty is not None:
+        kwargs["repeat_penalty"] = s.llm_repeat_penalty
     if json_mode:
         kwargs["format"] = "json"
     return ChatOllama(**kwargs)
+
+
+def _gemini_thinking_kwargs(settings: Settings) -> dict[str, Any]:
+    """Map config to LangChain Gemini thinking controls (when supported by the installed SDK)."""
+    out: dict[str, Any] = {}
+    level = (settings.gemini_thinking_level or "").strip()
+    if level:
+        out["thinking_level"] = level
+        return out
+    if settings.gemini_thinking_budget is not None:
+        out["thinking_budget"] = settings.gemini_thinking_budget
+    return out
 
 
 def build_chat_gemini(model: str, json_mode: bool = False) -> Any:
     from langchain_google_genai import ChatGoogleGenerativeAI
 
     s = get_settings()
-    kwargs: dict = {"model": model}
+    kwargs: dict = {
+        "model": model,
+        "temperature": s.llm_temperature,
+        "top_p": s.llm_top_p,
+    }
+    if s.llm_top_k is not None:
+        kwargs["top_k"] = s.llm_top_k
+    if s.llm_max_output_tokens is not None:
+        kwargs["max_output_tokens"] = s.llm_max_output_tokens
     if s.google_cloud_project.strip():
         kwargs["vertexai"] = True
         kwargs["project"] = s.google_cloud_project.strip()
         kwargs["location"] = s.google_cloud_location.strip() or "us-central1"
     elif s.gemini_api_key.strip():
         kwargs["google_api_key"] = s.gemini_api_key.strip()
+    kwargs.update(_gemini_thinking_kwargs(s))
     if json_mode:
         kwargs["model_kwargs"] = {"response_mime_type": "application/json"}
     return ChatGoogleGenerativeAI(**kwargs)

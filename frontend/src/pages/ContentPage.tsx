@@ -26,7 +26,7 @@ export default function ContentPage() {
     mutationFn: (file: File) => uploadContent(file, projectId),
     onSuccess: (d) => {
       setDocumentId(d.document_id);
-      setStatus(`Uploaded "${d.title}". Run ingest.`);
+      setStatus(`Uploaded "${d.title}". Ready to ingest.`);
       qc.invalidateQueries({ queryKey: ["documents"] });
       qc.invalidateQueries({ queryKey: ["concepts", d.document_id] });
     },
@@ -39,13 +39,24 @@ export default function ContentPage() {
     setIngestError(null);
     setStatus(null);
     try {
+      let conceptsFound = 0;
+      let chunksIndexed = 0;
       await ingestDocumentStream(documentId, (p) => {
         setIngestProgress(p);
+        if (p.event === "done") {
+          chunksIndexed = p.document?.chunk_count ?? 0;
+        }
+        if (p.step === "kg_done") {
+          const match = (p.detail ?? "").match(/(\d+)\s+concepts?/i);
+          conceptsFound = match ? Number(match[1]) : 0;
+        }
         if (p.event === "error") {
           setIngestError(p.detail ?? "Ingest failed");
         }
       });
-      setStatus("Ingestion complete.");
+      const chunkText = chunksIndexed ? `${chunksIndexed} chunks` : "chunks indexed";
+      const conceptText = conceptsFound ? `${conceptsFound} concepts found` : "concept extraction completed";
+      setStatus(`✓ Ingested — ${chunkText}, ${conceptText}.`);
       qc.invalidateQueries({ queryKey: ["concepts", documentId] });
       qc.invalidateQueries({ queryKey: ["documents"] });
     } catch (e) {

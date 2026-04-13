@@ -72,7 +72,7 @@ class VectorStore:
             text=text,
             metadata={"concept_id": str(concept_id), "document_id": str(document_id)},
         )
-        splitter = SentenceSplitter(chunk_size=900, chunk_overlap=120)
+        splitter = SentenceSplitter(chunk_size=512, chunk_overlap=64)
         nodes = splitter.get_nodes_from_documents([doc])
         if not nodes:
             doc = Document(text=title_fallback, metadata={"concept_id": str(concept_id)})

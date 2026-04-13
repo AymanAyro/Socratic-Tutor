@@ -15,10 +15,12 @@ logger = logging.getLogger(__name__)
 KG_PROMPT = """You extract a small concept graph from educational text.
 Return JSON only:
 {
-  "concepts": [{"name": string, "description": string, "difficulty_level": number}],
+  "concepts": [{"name": string, "description": string, "difficulty_level": number, "parentConcept": string|null, "pageRef": string|null}],
   "edges": [{"from_name": string, "to_name": string, "relationship": string}]
 }
-Use 3-12 concepts when possible. Relationships like "prerequisite_of", "example_of", "part_of".
+Extract as many distinct technical concepts as useful (target 12-40 when available).
+Prefer a hierarchy via parentConcept when possible. Include approximate pageRef when present.
+Relationships like "prerequisite_of", "example_of", "part_of".
 """
 
 
@@ -50,7 +52,11 @@ class KnowledgeGraphBuilder:
 
     async def build_from_text(self, document_id: uuid.UUID, text_sample: str) -> tuple[list[Concept], list[ConceptEdge]]:
         sample = text_sample[:12000]
-        user = f"Source text:\n{sample}"
+        user = (
+            "Source text:\n"
+            f"{sample}\n\n"
+            "Extract the concept graph now and return JSON only."
+        )
         logger.info(
             "KG: calling generation model=%s (chars=%s)",
             self._settings.generation_model_id,
@@ -81,7 +87,18 @@ class KnowledgeGraphBuilder:
                     id=cid,
                     document_id=document_id,
                     name=name,
-                    description=(c.get("description") or "")[:8000] or None,
+                    description=(
+                        (
+                            (c.get("description") or "")
+                            + (
+                                f" Parent: {c.get('parentConcept')}."
+                                if c.get("parentConcept")
+                                else ""
+                            )
+                            + (f" Ref: {c.get('pageRef')}." if c.get("pageRef") else "")
+                        )[:8000]
+                    )
+                    or None,
                     difficulty_level=int(c.get("difficulty_level") or 1),
                 )
             )

@@ -12,15 +12,15 @@ export default function ChatBubble({ role, text }: Props) {
       className={`flex ${isTutor ? "justify-start" : "justify-end"}`}
     >
       <div
-        className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+        className={`max-w-[85%] px-4 py-3 text-sm leading-relaxed ${
           isTutor
-            ? "bg-surface border border-border text-text shadow-sm border-l-[3px] border-l-accent/60"
-            : "bg-gradient-to-br from-surface-2 to-[#2d235e] text-text shadow-md shadow-black/20 border border-border"
+            ? "rounded-[18px] rounded-bl-[4px] bg-white border border-[#e8e8f0] text-[#1a1a2e] shadow-sm"
+            : "rounded-[18px] rounded-br-[4px] bg-[#6C63FF] text-white shadow-md border border-[#6C63FF]"
         }`}
       >
         <div
           className={`text-[10px] uppercase tracking-wider mb-1 ${
-            isTutor ? "text-accent font-semibold" : "text-white/70"
+            isTutor ? "text-accent font-semibold" : "text-white/80"
           }`}
         >
           {isTutor ? "Tutor" : "You"}

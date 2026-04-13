@@ -1,12 +1,15 @@
 import { motion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useSessionStore } from "../stores/sessionStore";
 import { fetchDue, fetchMastery } from "../api/progress";
 import { fetchSessionHistory } from "../api/session";
 import MasteryRadar from "../components/dashboard/MasteryRadar";
 
 export default function DashboardPage() {
-  const { userId, setUserId } = useSessionStore();
+  const navigate = useNavigate();
+  const { userId, setUserId, setConceptId } = useSessionStore();
 
   const masteryQ = useQuery({
     queryKey: ["mastery", userId],
@@ -25,6 +28,19 @@ export default function DashboardPage() {
     queryFn: () => fetchSessionHistory(userId!),
     enabled: !!userId,
   });
+
+  const stats = useMemo(() => {
+    const sessions = historyQ.data ?? [];
+    const mastery = masteryQ.data ?? [];
+    const avgMastery = mastery.length
+      ? mastery.reduce((sum, item) => sum + item.score, 0) / mastery.length
+      : 0;
+    return {
+      totalSessions: sessions.length,
+      totalConcepts: mastery.length,
+      avgMastery,
+    };
+  }, [historyQ.data, masteryQ.data]);
 
   return (
     <div className="space-y-8">
@@ -48,12 +64,6 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {userId && (
-        <p className="text-xs font-mono text-muted">
-          Learner: <span className="select-all text-text">{userId}</span>
-        </p>
-      )}
-
       {!userId && (
         <motion.p
           initial={{ opacity: 0, y: 6 }}
@@ -75,11 +85,27 @@ export default function DashboardPage() {
           <MasteryRadar
             items={masteryQ.data.map((m) => ({
               concept_id: m.concept_id,
+              name: m.concept_name ?? undefined,
               score: m.score,
             }))}
           />
         )}
       </motion.section>
+
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <p className="text-xs text-muted">Total sessions</p>
+          <p className="text-2xl font-semibold text-text">{stats.totalSessions}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <p className="text-xs text-muted">Concepts studied</p>
+          <p className="text-2xl font-semibold text-text">{stats.totalConcepts}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <p className="text-xs text-muted">Average mastery</p>
+          <p className="text-2xl font-semibold text-text">{Math.round(stats.avgMastery * 100)}%</p>
+        </div>
+      </section>
 
       <motion.section
         initial={{ opacity: 0, y: 10 }}
@@ -95,7 +121,10 @@ export default function DashboardPage() {
               <div key={s.session_id} className="rounded-xl border border-border p-3 bg-surface-2">
                 <p className="text-sm font-medium text-text">{s.name ?? s.concept_name}</p>
                 <p className="text-xs text-muted mt-1">{new Date(s.started_at).toLocaleDateString()}</p>
-                <p className="text-xs text-muted mt-2">{s.total_turns} turns</p>
+                <p className="text-xs text-muted mt-2">{s.total_turns} turns · {s.concept_name}</p>
+                <span className="inline-flex mt-2 rounded-md border border-border px-2 py-0.5 text-[11px] text-muted">
+                  {s.total_turns >= 5 ? "Progressing" : "Struggling"}
+                </span>
               </div>
             ))}
           </div>
@@ -123,8 +152,28 @@ export default function DashboardPage() {
                 transition={{ delay: i * 0.04, duration: 0.2 }}
                 className="flex justify-between gap-4 border-b border-border pb-2"
               >
-                <span className="font-medium text-text">{d.name}</span>
-                <span className="text-muted tabular-nums">{d.next_review_date}</span>
+                <div>
+                  <span className="font-medium text-text">{d.name}</span>
+                  <div className="h-1.5 bg-surface-2 rounded-full mt-2 overflow-hidden w-36">
+                    <div
+                      className="h-full bg-accent rounded-full"
+                      style={{ width: `${Math.max(0, Math.min(100, (d.score ?? 0) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-muted tabular-nums block">{d.next_review_date}</span>
+                  <button
+                    type="button"
+                    className="text-xs text-accent underline mt-1"
+                    onClick={() => {
+                      setConceptId(d.concept_id);
+                      navigate("/tutor");
+                    }}
+                  >
+                    Review now
+                  </button>
+                </div>
               </motion.li>
             ))}
           </ul>

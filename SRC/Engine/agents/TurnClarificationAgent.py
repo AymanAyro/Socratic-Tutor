@@ -18,11 +18,6 @@ Write a clarification in 2-4 sentences that explains:
 Do NOT answer the question itself. Do NOT give the answer away.
 Write for the student - use "this question asks you to..." framing.
 Be concrete and specific to the concept, not generic.
-
-Topic: {topic}
-The tutor just asked: {question}
-The student's prior answer (for context): {prior_answer}
-
 Write only the clarification paragraph. No headings, no lists.
 """
 
@@ -37,9 +32,6 @@ Rules:
 - Show mechanism or relationship, not a list of terms
 - No title node, no legend nodes
 - Output only the raw Mermaid code. Nothing else.
-
-Topic: {topic}
-Concept being probed by this question: {question}
 """
 
 
@@ -64,14 +56,16 @@ def _safe_clarification(text: str) -> str:
 
 async def generate_clarification(topic: str, question: str, prior_answer: str) -> str:
     settings = get_settings()
-    system = CLARIFICATION_SYSTEM.format(
-        topic=topic,
-        question=question[:900],
-        prior_answer=prior_answer[:1200],
+    system = CLARIFICATION_SYSTEM
+    prompt = (
+        f"Topic: {topic}\n"
+        f"The tutor just asked: {question[:900]}\n"
+        f"The student's prior answer (for context): {prior_answer[:1200]}\n\n"
+        "Write the clarification now."
     )
     gen = get_generation_client()
     text, _ = await gen.generate(
-        prompt="Write the clarification now.",
+        prompt=prompt,
         system=system,
         model=settings.generation_model_id,
     )
@@ -80,13 +74,15 @@ async def generate_clarification(topic: str, question: str, prior_answer: str) -
 
 async def generate_turn_diagram(topic: str, question: str) -> str:
     settings = get_settings()
-    system = TURN_DIAGRAM_SYSTEM.format(
-        topic=topic[:200],
-        question=question[:700],
+    system = TURN_DIAGRAM_SYSTEM
+    prompt = (
+        f"Topic: {topic[:200]}\n"
+        f"Concept being probed by this question: {question[:700]}\n\n"
+        "Output only valid Mermaid."
     )
     gen = get_generation_client()
     text, _ = await gen.generate(
-        prompt="Output only valid Mermaid.",
+        prompt=prompt,
         system=system,
         model=settings.generation_model_id,
     )
