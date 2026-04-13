@@ -23,12 +23,14 @@ from Models.Schemas import (
     SessionPhaseOut,
     SessionStartRequest,
     SessionStartResponse,
+    TurnClarificationOut,
     TurnOut,
 )
 from Models.Session import Turn, TutorSession, User
 from Stats.MasteryTracker import MasteryTracker
 from Stats.SessionAnalytics import load_session
 from Stores.LLM.PromptRegistry import PromptRegistry
+from Stores.LLM.factory import get_generation_client
 from Stats.Metrics import EXAM_SESSION_SCORE_PERCENT, QUESTIONS_PER_SESSION, SESSION_DURATION_SECONDS
 from Utils.ContextManager import TurnLike
 from Utils.StreamingHandler import collect_stream, sse_event
@@ -38,6 +40,29 @@ logger = logging.getLogger(__name__)
 
 
 class SessionController:
+    async def _generate_session_name(self, topic: str, created_at: datetime) -> str:
+        date_str = created_at.strftime("%b %d")
+        fallback = f"{topic} · {date_str}"
+        try:
+            settings = get_settings()
+            gen = get_generation_client()
+            prompt = (
+                f"Generate a 3-5 word session title for a tutoring session on: {topic}. "
+                "Output only the title."
+            )
+            title, _ = await gen.generate(
+                prompt=prompt,
+                system="Return only a short title with no punctuation beyond spaces.",
+                model=settings.generation_model_id,
+            )
+            cleaned = " ".join((title or "").split()).strip(" -:.")
+            if not cleaned:
+                return fallback
+            return f"{cleaned} · {date_str}"
+        except Exception:
+            logger.exception("Session name generation failed topic=%s", topic)
+            return fallback
+
     async def ensure_user(self, db: AsyncSession, user_id: uuid.UUID | None) -> uuid.UUID:
         if user_id is None:
             u = User(id=uuid.uuid4(), created_at=datetime.now(timezone.utc))
@@ -82,6 +107,7 @@ class SessionController:
             session_mode=mode,
             use_stage2=use_stage2,
             teaching_phase="PROBE" if use_stage2 else None,
+            name=await self._generate_session_name(concept.name, now),
         )
         db.add(session)
         try:
@@ -171,6 +197,7 @@ class SessionController:
             exam_target_turns=settings.exam_target_turns,
             use_stage2=use_stage2,
             teaching_phase=session.teaching_phase,
+            session_name=session.name,
         )
 
     async def stream_turn(
@@ -537,6 +564,7 @@ class SessionController:
                 started_at=s.started_at,
                 ended_at=s.ended_at,
                 summary=s.summary_text,
+                name=s.name,
             )
             for s, cname in rows
         ]
@@ -548,6 +576,19 @@ class SessionController:
             )
         ).scalars().all()
         return [TurnOut.model_validate(t) for t in rows]
+
+    async def get_turn_clarification(
+        self, db: AsyncSession, turn_id: uuid.UUID
+    ) -> TurnClarificationOut:
+        turn = (await db.execute(select(Turn).where(Turn.id == turn_id))).scalar_one_or_none()
+        if turn is None:
+            raise HTTPException(status_code=404, detail="Turn not found")
+        return TurnClarificationOut(
+            turn_id=turn.id,
+            clarification=turn.clarification,
+            diagram_svg=turn.diagram_svg,
+            status=turn.clarification_status,
+        )
 
     async def end_session(
         self,

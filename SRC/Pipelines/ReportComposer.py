@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import jinja2
@@ -38,15 +39,32 @@ class ReportComposer:
         )
         template = env.get_template("session_report.html")
         ctx = {
-            "session_id": str(session_id),
-            "concept_name": concept_name,
-            "probe_turns": state_snapshot.get("probe_turns", 0),
-            "self_rating": state_snapshot.get("self_rating"),
-            "classifier_confidence": state_snapshot.get("last_classifier_confidence"),
+            "session": {
+                "session_id": str(session_id),
+                "topic": concept_name,
+                "name": state_snapshot.get("session_name") or concept_name,
+            },
+            "generated_at": datetime.now(timezone.utc).strftime("%b %d, %Y"),
+            "summary": {
+                "probe_turns": int(state_snapshot.get("probe_turns") or 0),
+                "self_rating": state_snapshot.get("self_rating"),
+                "classifier_confidence": float(state_snapshot.get("last_classifier_confidence") or 0.0),
+                "overall": analyst.get("overall_performance", "developing"),
+            },
             "analyst": analyst,
-            "turns": turns,
-            "diagram_svg": diagram_svg,
-            "ideal_answer": ideal_answer,
+            "turns": [
+                {
+                    "student_input": t.student_input,
+                    "question": t.question_generated,
+                    "classifier_state": t.classifier_state,
+                    "clarification": t.clarification,
+                    "diagram_svg": t.diagram_svg,
+                }
+                for t in turns
+            ],
+            "concept_diagram_svg": diagram_svg,
+            "model_answer": ideal_answer,
+            "review_schedule": [],
         }
         html_str = template.render(**ctx)
         out_path = self._output_dir / f"{session_id}.pdf"

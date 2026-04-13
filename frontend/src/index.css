@@ -5,6 +5,32 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --color-bg: #f6f7fb;
+    --color-surface: #ffffff;
+    --color-surface-2: #f2f4fa;
+    --color-border: #dde3ef;
+    --color-text: #111827;
+    --color-muted: #5b6474;
+    --color-accent: #6d5efc;
+    --color-accent-dim: #4f43c5;
+    --color-correct: #22c55e;
+    --color-partial: #f59e0b;
+    --color-wrong: #ef4444;
+    --color-stuck: #8b5cf6;
+  }
+
+  [data-theme="dark"] {
+    --color-bg: #0f0f13;
+    --color-surface: #1a1a22;
+    --color-surface-2: #23232e;
+    --color-border: #2e2e3a;
+    --color-text: #e8e8f0;
+    --color-muted: #9898b0;
+    --color-accent: #7c6af7;
+    --color-accent-dim: #3d3580;
+  }
+
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
@@ -14,17 +40,18 @@
   body {
     margin: 0;
     min-height: 100vh;
-    background: #f8fafc;
-    background-image: radial-gradient(circle at 1px 1px, #e2e8f0 1px, transparent 0);
+    background: var(--color-bg);
+    color: var(--color-text);
+    background-image: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--color-border) 65%, transparent) 1px, transparent 0);
     background-size: 24px 24px;
   }
 }
 
 @layer utilities {
   .glass {
-    background: rgba(255, 255, 255, 0.75);
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+    backdrop-filter: blur(12px) saturate(120%);
+    -webkit-backdrop-filter: blur(12px) saturate(120%);
   }
 
   .gradient-text {
@@ -38,6 +65,6 @@
     @apply transition-all duration-200;
   }
   .card-hover:hover {
-    @apply shadow-md shadow-accent/10 -translate-y-0.5;
+    @apply shadow-md shadow-black/10 -translate-y-0.5;
   }
 }

@@ -14,8 +14,8 @@ export default function ChatBubble({ role, text }: Props) {
       <div
         className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
           isTutor
-            ? "bg-white border border-mist-200 text-ink-800 shadow-sm border-l-[3px] border-l-accent/60"
-            : "bg-gradient-to-br from-accent to-accent-dim text-white shadow-md shadow-accent/20"
+            ? "bg-surface border border-border text-text shadow-sm border-l-[3px] border-l-accent/60"
+            : "bg-gradient-to-br from-surface-2 to-[#2d235e] text-text shadow-md shadow-black/20 border border-border"
         }`}
       >
         <div

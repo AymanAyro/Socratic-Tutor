@@ -2,58 +2,143 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Session report — {{ concept_name }}</title>
+  <title>Session Report — {{ session.topic }}</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <header class="hdr">
-    <h1>Session report</h1>
-    <p class="meta">Session {{ session_id }} · {{ concept_name }}</p>
+  <header class="report-header">
+    <div class="header-brand">
+      <span class="brand-name">Socratic Tutor</span>
+    </div>
+    <div class="header-meta">
+      <h1 class="report-title">Session Report</h1>
+      <p class="report-subtitle">{{ session.name }} &nbsp;·&nbsp; {{ generated_at }}</p>
+      <p class="session-id">Session {{ session.session_id[:8] }}</p>
+    </div>
   </header>
 
-  <section class="block">
-    <h2>Performance summary</h2>
-    <table class="grid">
-      <tr><th>Probe turns</th><td>{{ probe_turns }}</td></tr>
-      <tr><th>Self-rating (1–5)</th><td>{% if self_rating is defined and self_rating is not none %}{{ self_rating }}{% else %}—{% endif %}</td></tr>
-      <tr><th>Last classifier confidence</th><td>{% if classifier_confidence is defined and classifier_confidence is not none %}{{ "%.2f"|format(classifier_confidence) }}{% else %}—{% endif %}</td></tr>
-      <tr><th>Overall</th><td>{{ analyst.get("overall_performance", "—") }}</td></tr>
+  <section class="section">
+    <h2 class="section-title">Performance overview</h2>
+    <div class="metric-grid">
+      <div class="metric-card">
+        <span class="metric-value">{{ summary.probe_turns }}</span>
+        <span class="metric-label">Probe turns</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-value">{{ summary.self_rating if summary.self_rating is not none else "—" }} / 5</span>
+        <span class="metric-label">Self-rating</span>
+      </div>
+      <div class="metric-card">
+        <span class="metric-value">{{ "%.2f"|format(summary.classifier_confidence) }}</span>
+        <span class="metric-label">Classifier confidence</span>
+      </div>
+      <div class="metric-card metric-card--highlight">
+        <span class="metric-value">{{ summary.overall }}</span>
+        <span class="metric-label">Overall</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">Understanding journey</h2>
+    <div class="turn-timeline">
+      {% for turn in turns %}
+      <div class="timeline-dot timeline-dot--{{ turn.classifier_state }}">
+        <span class="dot-number">{{ loop.index }}</span>
+        <span class="dot-label">{{ turn.classifier_state }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="section section--split">
+    <div class="split-left">
+      <h2 class="section-title">Concept diagram</h2>
+      <div class="diagram-container">
+        {{ concept_diagram_svg | safe }}
+      </div>
+    </div>
+    <div class="split-right">
+      <h2 class="section-title">Model answer</h2>
+      <div class="model-answer">{{ model_answer }}</div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">Dialogue breakdown</h2>
+    {% for turn in turns %}
+    <div class="turn-card turn-card--{{ turn.classifier_state }}">
+      <div class="turn-card-header">
+        <span class="turn-number">Turn {{ loop.index }}</span>
+        <span class="turn-badge turn-badge--{{ turn.classifier_state }}">{{ turn.classifier_state }}</span>
+      </div>
+      <div class="turn-student">
+        <span class="turn-role">Student</span>
+        <p>{{ turn.student_input }}</p>
+      </div>
+      <div class="turn-tutor">
+        <span class="turn-role">Tutor asked</span>
+        <p class="turn-question">{{ turn.question }}</p>
+      </div>
+      {% if turn.diagram_svg or turn.clarification %}
+      <div class="turn-enrichment">
+        {% if turn.diagram_svg %}
+        <div class="turn-diagram">{{ turn.diagram_svg | safe }}</div>
+        {% endif %}
+        {% if turn.clarification %}
+        <div class="turn-clarification">
+          <span class="clarification-label">What this probed</span>
+          <p>{{ turn.clarification }}</p>
+        </div>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">AI insight</h2>
+    <div class="insight-callout">
+      <p>{{ analyst.get("insight", "") }}</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">Recommendations</h2>
+    <div class="reco-grid">
+      {% for reco in analyst.get("recommendations", []) %}
+      <div class="reco-card">
+        <span class="reco-number">{{ loop.index }}</span>
+        <p>{{ reco }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  {% if review_schedule %}
+  <section class="section">
+    <h2 class="section-title">Next review schedule</h2>
+    <table class="review-table">
+      <thead>
+        <tr><th>Concept</th><th>Mastery</th><th>Review in</th></tr>
+      </thead>
+      <tbody>
+        {% for item in review_schedule %}
+        <tr>
+          <td>{{ item.concept_name }}</td>
+          <td>
+            <div class="mastery-bar">
+              <div class="mastery-fill" style="width: {{ (item.score * 100)|int }}%"></div>
+            </div>
+            <span class="mastery-pct">{{ (item.score * 100)|int }}%</span>
+          </td>
+          <td>{{ item.days_until_review }} days</td>
+        </tr>
+        {% endfor %}
+      </tbody>
     </table>
   </section>
-
-  {% if diagram_svg %}
-  <section class="block">
-    <h2>Concept diagram</h2>
-    <div class="diagram">{{ diagram_svg|safe }}</div>
-  </section>
   {% endif %}
-
-  <section class="block">
-    <h2>Model answer</h2>
-    <p class="answer">{{ ideal_answer }}</p>
-  </section>
-
-  <section class="block">
-    <h2>Dialogue turns</h2>
-    <ol>
-      {% for t in turns %}
-      <li><strong>{{ t.classifier_state }}</strong> — {{ t.student_input[:200] }}{% if t.student_input|length > 200 %}…{% endif %}</li>
-      {% endfor %}
-    </ol>
-  </section>
-
-  <section class="block">
-    <h2>Insight</h2>
-    <p>{{ analyst.get("insight", "") }}</p>
-  </section>
-
-  <section class="block">
-    <h2>Recommendations</h2>
-    <ul>
-      {% for r in analyst.get("recommendations", []) %}
-      <li>{{ r }}</li>
-      {% endfor %}
-    </ul>
-  </section>
 </body>
 </html>

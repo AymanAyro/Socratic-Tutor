@@ -17,6 +17,7 @@ export async function startSession(body: {
   exam_target_turns: number;
   use_stage2: boolean;
   teaching_phase: string | null;
+  session_name: string | null;
 }> {
   const r = await fetch(apiUrl("/session/start"), {
     method: "POST",
@@ -102,6 +103,7 @@ export interface SessionHistoryItem {
   started_at: string;
   ended_at: string | null;
   summary: string | null;
+  name?: string | null;
 }
 
 export async function fetchSessionHistory(
@@ -124,10 +126,49 @@ export interface TurnInfo {
   classifier_state: string;
   question_generated: string;
   created_at: string;
+  clarification?: string | null;
+  diagram_svg?: string | null;
+  clarification_status?: "pending" | "generating" | "ready" | "failed" | null;
 }
 
 export async function fetchSessionTurns(sessionId: string): Promise<TurnInfo[]> {
   const r = await fetch(apiUrl(`/session/${sessionId}/turns`));
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export type SessionTurn = {
+  turn_id: string;
+  student_input: string;
+  question: string;
+  classifier_state: string;
+  clarification: string | null;
+  diagram_svg: string | null;
+  clarification_status: "pending" | "generating" | "ready" | "failed";
+  created_at: string;
+};
+
+export async function getSessionTurns(sessionId: string): Promise<SessionTurn[]> {
+  const rows = await fetchSessionTurns(sessionId);
+  return rows.map((t) => ({
+    turn_id: t.id,
+    student_input: t.student_input,
+    question: t.question_generated,
+    classifier_state: t.classifier_state,
+    clarification: t.clarification ?? null,
+    diagram_svg: t.diagram_svg ?? null,
+    clarification_status: (t.clarification_status ?? "pending") as SessionTurn["clarification_status"],
+    created_at: t.created_at,
+  }));
+}
+
+export async function getTurnClarification(turnId: string): Promise<{
+  turn_id: string;
+  clarification: string | null;
+  diagram_svg: string | null;
+  status: "pending" | "generating" | "ready" | "failed";
+}> {
+  const r = await fetch(apiUrl(`/session/turn/${turnId}/clarification`));
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 }

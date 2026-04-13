@@ -20,13 +20,13 @@ export default function InputBar({ onSend, disabled, placeholder }: Props) {
   };
 
   return (
-    <div className="flex gap-2 items-end border-t border-mist-200/60 pt-4">
+    <div className="flex gap-2 items-end border-t border-border pt-4">
       <textarea
         value={value}
         onChange={(e) => setValue(e.target.value)}
         placeholder={placeholder ?? "Your answer..."}
         rows={2}
-        className="flex-1 resize-none rounded-xl border border-mist-200 bg-white/80 px-4 py-2.5 text-sm outline-none transition-all duration-200 focus:border-accent/50 focus:ring-2 focus:ring-accent/20 focus:shadow-sm focus:shadow-accent/10 disabled:opacity-50"
+        className="flex-1 resize-none rounded-xl border border-border bg-surface-2 text-text px-4 py-2.5 text-sm outline-none transition-all duration-200 focus:border-accent/60 focus:ring-2 focus:ring-accent/20 disabled:opacity-50"
         disabled={disabled}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {

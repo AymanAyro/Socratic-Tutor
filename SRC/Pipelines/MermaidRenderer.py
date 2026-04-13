@@ -21,7 +21,17 @@ MERMAID_HTML_SUFFIX = """</pre>
 </body></html>"""
 
 
-async def render_mermaid_to_svg(mermaid_code: str) -> str:
+def fallback_diagram_svg(concept_name: str) -> str:
+    label = (concept_name or "Concept").strip()[:48]
+    return f"""
+<svg viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
+  <rect x="10" y="10" width="180" height="60" rx="8" fill="#1a1a22" stroke="#7c6af7" stroke-width="1"/>
+  <text x="100" y="45" text-anchor="middle" font-size="13" font-family="system-ui" fill="#9898b0">{label}</text>
+</svg>
+""".strip()
+
+
+async def render_mermaid_to_svg(mermaid_code: str, fallback_label: str | None = None) -> str:
     settings = get_settings()
     t0 = time.perf_counter()
     safe = (mermaid_code or "").replace("</script>", "<\\/script>")
@@ -41,4 +51,6 @@ async def render_mermaid_to_svg(mermaid_code: str) -> str:
     except Exception:
         logger.exception("Mermaid render failed")
         DIAGRAM_RENDER_LATENCY.observe(time.perf_counter() - t0)
+        if fallback_label:
+            return fallback_diagram_svg(fallback_label)
         raise

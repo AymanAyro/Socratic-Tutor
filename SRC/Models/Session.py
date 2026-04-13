@@ -39,6 +39,7 @@ class TutorSession(Base):
     self_rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
     report_pdf_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     report_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    name: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     turns: Mapped[list["Turn"]] = relationship(back_populates="session")
     mastery_scores: Mapped[list["MasteryScore"]] = relationship(back_populates="session")
@@ -60,6 +61,9 @@ class Turn(Base):
     tokens_used: Mapped[int] = mapped_column(Integer, default=0)
     prompt_version: Mapped[str] = mapped_column(String(64), nullable=False, default="v1.0.0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    clarification: Mapped[str | None] = mapped_column(Text, nullable=True)
+    diagram_svg: Mapped[str | None] = mapped_column(Text, nullable=True)
+    clarification_status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
 
     session: Mapped["TutorSession"] = relationship(back_populates="turns")
 

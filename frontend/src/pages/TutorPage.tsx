@@ -1,10 +1,11 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   endSession,
   fetchReportStatus,
   fetchSessionPhase,
+  getSessionTurns,
   reportPdfUrl,
   revealEarly,
   startSession,
@@ -14,7 +15,10 @@ import {
   type SessionMode,
 } from "../api/session";
 import ChatBubble from "../components/chat/ChatBubble";
+import InsightPanel from "../components/chat/InsightPanel";
 import InputBar from "../components/chat/InputBar";
+import PhaseBadge from "../components/chat/PhaseBadge";
+import TutorMessage from "../components/chat/TutorMessage";
 import TypingIndicator from "../components/chat/TypingIndicator";
 import SessionHistory from "../components/session/SessionHistory";
 import { useSessionStore } from "../stores/sessionStore";
@@ -67,10 +71,12 @@ export default function TutorPage() {
   const {
     conceptId,
     sessionId,
+    sessionName,
     messages,
     userId,
     setUserId,
     setSessionId,
+    setSessionName,
     appendMessage,
     appendTutorChunk,
     resetChat,
@@ -89,6 +95,22 @@ export default function TutorPage() {
   const [revealHtml, setRevealHtml] = useState<string | null>(null);
   const [diagramNote, setDiagramNote] = useState<string | null>(null);
   const [reportReadyUrl, setReportReadyUrl] = useState<string | null>(null);
+  const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
+  const [insightPanelOpen, setInsightPanelOpen] = useState(false);
+
+  const turnsQ = useQuery({
+    queryKey: ["turns", sessionId],
+    queryFn: () => getSessionTurns(sessionId!),
+    enabled: !!sessionId,
+    refetchInterval: (q) => {
+      const rows = q.state.data;
+      if (!rows?.length) return 2000;
+      const allSettled = rows.every(
+        (t) => t.clarification_status === "ready" || t.clarification_status === "failed"
+      );
+      return allSettled ? false : 2000;
+    },
+  });
 
   const startMut = useMutation({
     mutationFn: async () => {
@@ -104,6 +126,7 @@ export default function TutorPage() {
       setUserId(data.user_id);
       resetChat();
       setSessionId(data.session_id);
+      setSessionName(data.session_name);
       setActiveMode(data.session_mode);
       setExamLive(null);
       setExamFinal(null);
@@ -202,11 +225,16 @@ export default function TutorPage() {
     return colors[state] ?? "bg-mist-100 text-ink-600 border-mist-200";
   };
 
+  const turnForTutorMessage = (text: string) => {
+    if (!text.trim()) return undefined;
+    return turnsQ.data?.find((t) => t.question.trim() === text.trim());
+  };
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-ink-950">Tutor</h1>
-        <p className="text-sm text-ink-500 mt-1">
+        <h1 className="text-2xl font-semibold text-text">Tutor</h1>
+        <p className="text-sm text-muted mt-1">
           Guided questions only — upload material and choose a concept on the Content tab.
         </p>
       </div>
@@ -215,15 +243,32 @@ export default function TutorPage() {
         <motion.div
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-xl bg-amber-50/80 border border-amber-200/60 text-amber-800 text-sm px-4 py-3"
+          className="rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-sm px-4 py-3"
         >
           Select a concept from the Content page before starting.
         </motion.div>
       )}
 
+      {!sessionId && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-border bg-surface p-4">
+            <p className="text-sm font-medium">Step 1 — Upload or paste content</p>
+            <p className="text-xs text-muted mt-1">
+              Use the Content page to upload a document or enter a topic manually.
+            </p>
+          </div>
+          <div className="rounded-xl border border-border bg-surface p-4">
+            <p className="text-sm font-medium">Step 2 — Configure session</p>
+            <p className="text-xs text-muted mt-1">
+              Select concept, choose mode, then start session.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs font-medium text-ink-500 uppercase tracking-wide">Mode</span>
-        <div className="flex rounded-xl border border-mist-200 p-0.5 bg-mist-50/50">
+        <span className="text-xs font-medium text-muted uppercase tracking-wide">Mode</span>
+        <div className="flex rounded-xl border border-border p-0.5 bg-surface">
           {(["socratic", "exam_prep"] as const).map((m) => (
             <button
               key={m}
@@ -232,8 +277,8 @@ export default function TutorPage() {
               onClick={() => setSessionMode(m)}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                 sessionMode === m
-                  ? "bg-white text-ink-900 shadow-sm"
-                  : "text-ink-500 hover:text-ink-700"
+                  ? "bg-surface-2 text-text shadow-sm"
+                  : "text-muted hover:text-text"
               } ${sessionId ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               {m === "socratic" ? "Socratic" : "Exam prep"}
@@ -241,13 +286,13 @@ export default function TutorPage() {
           ))}
         </div>
         {sessionMode === "exam_prep" && !sessionId && (
-          <p className="text-xs text-ink-500 max-w-md">
+          <p className="text-xs text-muted max-w-md">
             Questions stay Socratic; each answer is scored. Use &quot;Finish &amp; score&quot; for a
             summary.
           </p>
         )}
         {sessionMode === "socratic" && !sessionId && (
-          <label className="flex items-center gap-2 text-xs text-ink-600 cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
             <input
               type="checkbox"
               checked={useStage2}
@@ -260,14 +305,14 @@ export default function TutorPage() {
       </div>
 
       {stage2Active && sessionId && teachingPhase && (
-        <div className="text-xs text-ink-500">
+        <div className="text-xs text-muted">
           <p>
-            Phase: <span className="font-semibold text-ink-800">{teachingPhase}</span>
+            Phase: <span className="font-semibold text-text">{teachingPhase}</span>
           </p>
           {(() => {
             const hint = stage2PhaseHint(teachingPhase);
             return hint ? (
-              <p className="mt-1 text-ink-600 leading-snug max-w-2xl">{hint}</p>
+              <p className="mt-1 text-muted leading-snug max-w-2xl">{hint}</p>
             ) : null;
           })()}
           {teachingPhase === "PROBE" && (
@@ -318,7 +363,7 @@ export default function TutorPage() {
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
             type="button"
-            className="rounded-xl border border-mist-200 px-4 py-2 text-sm text-ink-600"
+            className="rounded-xl border border-border px-4 py-2 text-sm text-text"
             disabled={endMut.isPending}
             onClick={() => sessionId && endMut.mutate(sessionId)}
           >
@@ -342,10 +387,11 @@ export default function TutorPage() {
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}
             type="button"
-            className="rounded-xl border border-mist-200 px-4 py-2 text-sm text-ink-600 hover:bg-mist-50 transition-colors"
+            className="rounded-xl border border-border px-4 py-2 text-sm text-text hover:bg-surface-2 transition-colors"
             onClick={() => {
               resetChat();
               setSessionId(null);
+              setSessionName(null);
               setActiveMode(null);
               setExamLive(null);
               setExamFinal(null);
@@ -363,7 +409,7 @@ export default function TutorPage() {
             className={`rounded-xl border px-4 py-2 text-sm font-medium transition-all duration-200 ${
               showHistory
                 ? "border-accent text-accent bg-accent-50 shadow-sm shadow-accent/10"
-                : "border-mist-200 text-ink-600 hover:border-accent/30"
+                : "border-border text-text hover:border-accent/30"
             }`}
             onClick={() => setShowHistory(!showHistory)}
           >
@@ -384,7 +430,7 @@ export default function TutorPage() {
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="rounded-xl border border-mist-200 bg-white/90 px-4 py-3 text-sm text-ink-700"
+            className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text"
           >
             <div className="flex flex-wrap gap-4 items-center">
               <span>
@@ -397,7 +443,7 @@ export default function TutorPage() {
                 Running average: <strong>{(examLive.average * 100).toFixed(1)}%</strong>
               </span>
             </div>
-            <div className="mt-2 h-1.5 rounded-full bg-mist-200 overflow-hidden">
+            <div className="mt-2 h-1.5 rounded-full bg-surface-2 overflow-hidden">
               <motion.div
                 className="h-full bg-accent/80 rounded-full"
                 initial={{ width: 0 }}
@@ -416,19 +462,19 @@ export default function TutorPage() {
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="rounded-2xl border border-accent/30 bg-gradient-to-br from-accent-50 to-white p-5 shadow-sm"
+            className="rounded-2xl border border-accent/30 bg-gradient-to-br from-[#1f1a3b] to-surface p-5 shadow-sm"
           >
-            <h3 className="text-sm font-semibold text-ink-900">Exam session result</h3>
+            <h3 className="text-sm font-semibold text-text">Exam session result</h3>
             <p className="mt-2 text-2xl font-bold text-accent">
               {examFinal.score_percent.toFixed(1)}%
             </p>
-            <p className="text-sm text-ink-600 mt-1">
+            <p className="text-sm text-muted mt-1">
               {examFinal.points_earned.toFixed(2)} / {examFinal.points_possible.toFixed(0)} points
               across {examFinal.turns_graded} graded turn(s).
             </p>
             <button
               type="button"
-              className="mt-3 text-xs text-ink-500 underline hover:text-ink-700"
+              className="mt-3 text-xs text-muted underline hover:text-text"
               onClick={() => setExamFinal(null)}
             >
               Dismiss
@@ -446,7 +492,7 @@ export default function TutorPage() {
             transition={{ duration: 0.25, ease: "easeInOut" }}
             className="overflow-hidden"
           >
-            <div className="rounded-2xl border border-mist-200 bg-white/80 p-4 shadow-sm">
+            <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
               <SessionHistory />
             </div>
           </motion.div>
@@ -466,23 +512,23 @@ export default function TutorPage() {
 
       {revealHtml && (
         <div
-          className="rounded-xl border border-mist-200 bg-white p-3 overflow-x-auto max-h-64 text-sm [&_svg]:max-h-52"
+          className="rounded-xl border border-border bg-surface p-3 overflow-x-auto max-h-64 text-sm [&_svg]:max-h-52"
           dangerouslySetInnerHTML={{ __html: revealHtml }}
         />
       )}
       {diagramNote && !revealHtml && (
-        <p className="rounded-xl border border-mist-200 bg-mist-50/80 px-3 py-2 text-sm text-ink-600">{diagramNote}</p>
+        <p className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-muted">{diagramNote}</p>
       )}
 
       {stage2Active && sessionId && teachingPhase === "REFLECT" && (
-        <div className="rounded-xl border border-accent/30 bg-accent-50/50 p-3 text-sm">
-          <p className="text-ink-700 mb-2">How well do you feel you understood this concept? (1–5)</p>
+        <div className="rounded-xl border border-accent/30 bg-accent/10 p-3 text-sm">
+          <p className="text-text mb-2">How well do you feel you understood this concept? (1–5)</p>
           <div className="flex flex-wrap gap-2">
             {[1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
                 type="button"
-                className="rounded-lg border border-mist-200 bg-white px-3 py-1.5 text-sm font-medium hover:border-accent"
+                className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium hover:border-accent"
                 onClick={async () => {
                   if (!sessionId) return;
                   try {
@@ -503,11 +549,36 @@ export default function TutorPage() {
         </div>
       )}
 
-      <div className="rounded-2xl border border-mist-200 bg-white/80 shadow-sm p-4 min-h-[320px] flex flex-col">
+      <div
+        className={`rounded-2xl border border-border bg-surface shadow-sm p-4 min-h-[320px] flex flex-col transition-all duration-300 ${
+          insightPanelOpen ? "mr-80" : ""
+        }`}
+      >
+        <div className="border-b border-border px-1 pb-3 mb-3 flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold">{sessionName ?? "Session"}</h2>
+            <p className="text-xs text-muted">
+              {activeMode ?? "socratic"} · Turn {turnsQ.data?.length ?? 0}
+            </p>
+          </div>
+          {teachingPhase && <PhaseBadge phase={teachingPhase} />}
+        </div>
         <div className="flex-1 space-y-3 overflow-y-auto max-h-[480px] pr-1">
-          {messages.map((m) => (
-            <ChatBubble key={m.id} role={m.role} text={m.text} />
-          ))}
+          {messages.map((m) =>
+            m.role === "tutor" ? (
+              <TutorMessage
+                key={m.id}
+                text={m.text}
+                turn={turnForTutorMessage(m.text)}
+                onInsightClick={(turnId) => {
+                  setActiveTurnId(turnId);
+                  setInsightPanelOpen(true);
+                }}
+              />
+            ) : (
+              <ChatBubble key={m.id} role={m.role} text={m.text} />
+            )
+          )}
           {typing && <TypingIndicator />}
           {regen && (
             <motion.p
@@ -532,6 +603,11 @@ export default function TutorPage() {
           <InputBar onSend={send} disabled={!sessionId || typing} />
         </div>
       </div>
+      <InsightPanel
+        turn={turnsQ.data?.find((t) => t.turn_id === activeTurnId)}
+        open={insightPanelOpen}
+        onClose={() => setInsightPanelOpen(false)}
+      />
     </div>
   );
 }

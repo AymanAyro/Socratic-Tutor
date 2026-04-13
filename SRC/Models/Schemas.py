@@ -89,6 +89,7 @@ class SessionStartResponse(BaseModel):
     exam_target_turns: int = Field(description="Planned number of graded rounds in exam_prep mode.")
     use_stage2: bool = False
     teaching_phase: str | None = None
+    session_name: str | None = None
 
 
 class SessionPhaseOut(BaseModel):
@@ -123,8 +124,18 @@ class TurnOut(BaseModel):
     classifier_state: str
     question_generated: str
     created_at: datetime
+    clarification: str | None = None
+    diagram_svg: str | None = None
+    clarification_status: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class TurnClarificationOut(BaseModel):
+    turn_id: uuid.UUID
+    clarification: str | None = None
+    diagram_svg: str | None = None
+    status: str
 
 
 class ExamResultOut(BaseModel):
@@ -148,6 +159,7 @@ class SessionHistoryItem(BaseModel):
     started_at: datetime
     ended_at: datetime | None
     summary: str | None
+    name: str | None = None
 
 
 # ── Progress ─────────────────────────────────────────────────────────

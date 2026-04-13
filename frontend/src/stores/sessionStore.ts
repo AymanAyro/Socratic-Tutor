@@ -10,12 +10,14 @@ type State = {
   documentId: string | null;
   conceptId: string | null;
   sessionId: string | null;
+  sessionName: string | null;
   messages: ChatMessage[];
   setUserId: (id: string) => void;
   setProjectId: (id: string | null) => void;
   setDocumentId: (id: string | null) => void;
   setConceptId: (id: string | null) => void;
   setSessionId: (id: string | null) => void;
+  setSessionName: (name: string | null) => void;
   appendMessage: (m: Omit<ChatMessage, "id">) => void;
   appendTutorChunk: (chunk: string) => void;
   resetChat: () => void;
@@ -29,6 +31,7 @@ export const useSessionStore = create<State>((set, get) => ({
   documentId: null,
   conceptId: null,
   sessionId: null,
+  sessionName: null,
   messages: [],
   setUserId: (id) => {
     localStorage.setItem("st_user_id", id);
@@ -42,6 +45,7 @@ export const useSessionStore = create<State>((set, get) => ({
   setDocumentId: (id) => set({ documentId: id }),
   setConceptId: (id) => set({ conceptId: id }),
   setSessionId: (id) => set({ sessionId: id }),
+  setSessionName: (name) => set({ sessionName: name }),
   appendMessage: (m) =>
     set({ messages: [...get().messages, { ...m, id: uid() }] }),
   appendTutorChunk: (chunk) => {
@@ -58,5 +62,5 @@ export const useSessionStore = create<State>((set, get) => ({
       set({ messages: [...msgs, { id: uid(), role: "tutor", text: chunk }] });
     }
   },
-  resetChat: () => set({ messages: [], sessionId: null }),
+  resetChat: () => set({ messages: [], sessionId: null, sessionName: null }),
 }));

@@ -13,6 +13,7 @@ from Models.Schemas import (
     SessionPhaseOut,
     SessionStartRequest,
     SessionStartResponse,
+    TurnClarificationOut,
     TurnOut,
     TurnRequest,
 )
@@ -58,6 +59,15 @@ async def session_turns(
 ):
     ctrl = SessionController()
     return await ctrl.list_turns(db, session_id)
+
+
+@router.get("/turn/{turn_id}/clarification", response_model=TurnClarificationOut)
+async def turn_clarification(
+    turn_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    ctrl = SessionController()
+    return await ctrl.get_turn_clarification(db, turn_id)
 
 
 @router.get("/{session_id}/phase", response_model=SessionPhaseOut)

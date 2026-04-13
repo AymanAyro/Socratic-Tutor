@@ -7,6 +7,16 @@ export default {
         sans: ['"DM Sans"', "system-ui", "sans-serif"],
       },
       colors: {
+        bg: "var(--color-bg)",
+        surface: "var(--color-surface)",
+        "surface-2": "var(--color-surface-2)",
+        border: "var(--color-border)",
+        text: "var(--color-text)",
+        muted: "var(--color-muted)",
+        correct: "var(--color-correct)",
+        partial: "var(--color-partial)",
+        wrong: "var(--color-wrong)",
+        stuck: "var(--color-stuck)",
         ink: {
           950: "#0c1222",
           900: "#111827",
@@ -19,13 +29,17 @@ export default {
         },
         mist: { 50: "#f8fafc", 100: "#f1f5f9", 200: "#e2e8f0", 300: "#cbd5e1", 400: "#94a3b8" },
         accent: {
-          DEFAULT: "#4f46e5",
-          dim: "#6366f1",
-          light: "#818cf8",
+          DEFAULT: "var(--color-accent)",
+          dim: "var(--color-accent-dim)",
+          light: "#9a8cff",
           50: "#eef2ff",
         },
       },
       keyframes: {
+        spotlight: {
+          "0%": { opacity: "0", transform: "translate(-72%, -62%) scale(0.5)" },
+          "100%": { opacity: "1", transform: "translate(-50%,-40%) scale(1)" },
+        },
         shimmer: {
           "0%": { transform: "translateX(-100%)" },
           "100%": { transform: "translateX(100%)" },
@@ -41,6 +55,7 @@ export default {
       },
       animation: {
         shimmer: "shimmer 2s infinite",
+        spotlight: "spotlight 2s ease .75s 1 forwards",
         "fade-up": "fade-up 0.4s ease-out both",
         pulse_dot: "pulse_dot 1.4s infinite ease-in-out both",
       },

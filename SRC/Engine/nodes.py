@@ -20,6 +20,7 @@ from Engine.agents.ConsolidationGen import generate_consolidation_question
 from Engine.agents.DiagramAgent import generate_concept_diagram_mermaid
 from Engine.agents.IdealAnswer import generate_ideal_answer
 from Engine.agents.PerformanceAnalyst import analyse_session_performance
+from Engine.agents.TurnClarificationAgent import generate_clarification, generate_turn_diagram
 from Engine.state import TeachingState
 from Models.Content import Concept
 from Models.Session import Turn, TutorSession
@@ -116,6 +117,34 @@ async def _compute_stuck_streak(db: AsyncSession, session_id: uuid.UUID, new_sta
     if prev and prev.classifier_state == "stuck":
         return prev.stuck_streak + 1
     return 1
+
+
+async def _generate_turn_clarification(
+    *,
+    turn_id: uuid.UUID,
+    topic: str,
+    question: str,
+    prior_answer: str,
+) -> None:
+    async with AsyncSessionLocal() as bg_db:
+        turn = (await bg_db.execute(select(Turn).where(Turn.id == turn_id))).scalar_one_or_none()
+        if turn is None:
+            return
+        turn.clarification_status = "generating"
+        await bg_db.flush()
+        try:
+            clarification, mermaid = await asyncio.gather(
+                generate_clarification(topic, question, prior_answer),
+                generate_turn_diagram(topic, question),
+            )
+            diagram_svg = await render_mermaid_to_svg(mermaid, fallback_label=topic)
+            turn.clarification = clarification
+            turn.diagram_svg = diagram_svg
+            turn.clarification_status = "ready"
+        except Exception:
+            logger.exception("Turn clarification failed turn=%s", turn_id)
+            turn.clarification_status = "failed"
+        await bg_db.commit()
 
 
 async def _sync_teaching_row(
@@ -394,6 +423,7 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
         tokens_used=tokens,
         prompt_version=prompt_version,
         created_at=datetime.now(timezone.utc),
+        clarification_status="pending",
     )
     db.add(turn)
     session_row.total_turns = session_row.total_turns + 1
@@ -402,6 +432,14 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
         await mt.apply_classifier_state(session_row.user_id, concept_uuid, cr.state, session_uuid)
     await _sync_teaching_row(db, session_uuid, phase="PROBE")
     await db.flush()
+    asyncio.create_task(
+        _generate_turn_clarification(
+            turn_id=turn.id,
+            topic=concept_row.name,
+            question=question_text.strip(),
+            prior_answer=student_answer,
+        )
+    )
 
     ai_msg = AIMessage(content=question_text.strip())
     return {
@@ -608,6 +646,7 @@ async def report_work(state: TeachingState, config: RunnableConfig) -> dict[str,
     cfg = config.get("configurable") or {}
     db: AsyncSession = cfg["db"]
     session_uuid = uuid.UUID(state["session_id"])
+    session_row = (await db.execute(select(TutorSession).where(TutorSession.id == session_uuid))).scalar_one()
     if (state.get("report_status") or "").lower() == "ready" and state.get("report_pdf_path"):
         return {}
     await _sync_teaching_row(db, session_uuid, report_status="pending")
@@ -637,10 +676,12 @@ async def report_work(state: TeachingState, config: RunnableConfig) -> dict[str,
     from Pipelines.ReportComposer import ReportComposer
 
     composer = ReportComposer()
+    snapshot = dict(state)
+    snapshot["session_name"] = session_row.name or state.get("concept_name") or ""
     pdf_path = await composer.compose(
         session_id=session_uuid,
         concept_name=concept_row.name,
-        state_snapshot=dict(state),
+        state_snapshot=snapshot,
         analyst=analyst,
         turns=turns,
         diagram_svg=str(assets.get("diagram_svg") or ""),
