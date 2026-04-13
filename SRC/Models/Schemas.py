@@ -69,6 +69,10 @@ class SessionStartRequest(BaseModel):
     concept_id: uuid.UUID
     user_id: uuid.UUID | None = None
     session_mode: Literal["socratic", "exam_prep"] = "socratic"
+    use_stage2: bool = Field(
+        default=False,
+        description="Enable Stage 2 phased teaching (LangGraph). Ignored when session_mode is exam_prep.",
+    )
     initial_message: str | None = Field(
         default=None,
         description="Optional first student message; otherwise tutor opens with a question.",
@@ -83,6 +87,29 @@ class SessionStartResponse(BaseModel):
     opening_question: str
     session_mode: Literal["socratic", "exam_prep"]
     exam_target_turns: int = Field(description="Planned number of graded rounds in exam_prep mode.")
+    use_stage2: bool = False
+    teaching_phase: str | None = None
+
+
+class SessionPhaseOut(BaseModel):
+    session_id: uuid.UUID
+    phase: str
+    probe_turns: int
+    max_probe_turns: int
+    self_rating: int | None = None
+    report_status: str | None = None
+    last_reveal: dict | None = None
+    last_tutor_plain: str | None = None
+
+
+class ReflectRequest(BaseModel):
+    rating: int = Field(ge=1, le=5, description="Self-reported understanding after reveal.")
+
+
+class ReportStatusOut(BaseModel):
+    session_id: uuid.UUID
+    status: str
+    pdf_path: str | None = None
 
 
 class TurnRequest(BaseModel):
@@ -139,6 +166,11 @@ class DueConceptOut(BaseModel):
     concept_id: uuid.UUID
     name: str
     next_review_date: date
+
+
+class ProgressHistoryOut(BaseModel):
+    mastery: list[MasteryOut]
+    sessions: list[SessionHistoryItem]
 
 
 class EvalClassifierRequest(BaseModel):

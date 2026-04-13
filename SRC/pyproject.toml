@@ -23,9 +23,14 @@ dependencies = [
     "llama-index-core>=0.12.0",
     "llama-index-vector-stores-chroma>=0.4.0",
     "llama-index-embeddings-langchain>=0.3.0",
-    "langchain-core>=0.3.0",
+    "langchain-core>=0.3.0,<2.0",
     "langchain-ollama>=0.2.0",
     "langchain-google-genai>=2.0.0",
+    "langgraph>=1.1.0,<2.0",
+    "weasyprint>=62.0",
+    "jinja2>=3.1",
+    "playwright>=1.44",
+    "langgraph-checkpoint-postgres>=2.0.0,<5.0",
 ]
 
 [project.optional-dependencies]

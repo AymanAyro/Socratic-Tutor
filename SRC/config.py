@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,7 +14,10 @@ class Settings(BaseSettings):
     generation_model_id: str = "qwen2.5:7b"
     embedding_model_id: str = "nomic-embed-text"
     ollama_base_url: str = "http://127.0.0.1:11434"
-    gemini_api_key: str = ""
+    gemini_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("GEMINI_API_KEY", "GOOGLE_API_KEY"),
+    )
 
     # GCP / Vertex (optional; when set, Gemini uses Vertex instead of API key)
     google_cloud_project: str = ""
@@ -47,6 +51,20 @@ class Settings(BaseSettings):
     default_prompt_version: str = "v1.0.0"
     enable_ab_testing: bool = False
 
+    # Stage 2 — LangGraph teaching phases (single-concept arc)
+    enable_stage2_graph: bool = False
+    langgraph_checkpoint_backend: str = "postgres"  # postgres | memory
+    min_probe_turns: int = 5
+    max_probe_turns_default: int = 5
+    mastery_confidence_threshold: float = 0.85
+    reveal_poll_timeout_seconds: float = 10.0
+    reveal_poll_interval_seconds: float = 0.5
+    report_output_dir: str = "reports"
+    report_template_dir: str = "templates/report"
+    pdf_generation_timeout_seconds: float = 30.0
+    mermaid_render_timeout_seconds: float = 10.0
+    mermaid_fallback_on_error: bool = True
+
     # CORS
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173,http://127.0.0.1:24678"
 
@@ -65,6 +83,14 @@ class Settings(BaseSettings):
     def database_url_sync(self) -> str:
         return (
             f"postgresql+psycopg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
+
+    @property
+    def postgres_checkpoint_conninfo(self) -> str:
+        """psycopg connection string for LangGraph PostgresSaver (no +driver suffix)."""
+        return (
+            f"postgresql://{self.postgres_user}:{self.postgres_password}"
             f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
         )
 

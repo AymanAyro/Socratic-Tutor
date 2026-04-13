@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from Controllers.ProgressController import ProgressController
-from Models.Schemas import DueConceptOut, MasteryOut
+from Models.Schemas import DueConceptOut, MasteryOut, ProgressHistoryOut
 from database import get_db
 
 router = APIRouter(prefix="/progress", tags=["progress"])
@@ -36,3 +36,12 @@ async def session_summary(
     ctrl = ProgressController()
     text = await ctrl.session_summary(db, session_id)
     return {"session_id": str(session_id), "summary": text}
+
+
+@router.get("/history/{user_id}", response_model=ProgressHistoryOut)
+async def progress_history(
+    user_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    ctrl = ProgressController()
+    return await ctrl.user_history(db, user_id)

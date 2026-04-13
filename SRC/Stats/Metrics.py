@@ -1,5 +1,40 @@
 from prometheus_client import Counter, Gauge, Histogram
 
+PHASE_TRANSITIONS = Counter(
+    "tutor_phase_transitions_total",
+    "Teaching phase transitions (Stage 2)",
+    ["from_phase", "to_phase"],
+)
+
+REVEAL_WAIT_TIME = Histogram(
+    "tutor_reveal_wait_seconds",
+    "Background worker duration for reveal assets",
+    buckets=[0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
+)
+
+SELF_RATING_GAP = Histogram(
+    "tutor_self_rating_gap",
+    "Self-rating minus scaled classifier confidence",
+    buckets=[-5.0, -4.0, -3.0, -2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0, 5.0],
+)
+
+DIAGRAM_RENDER_LATENCY = Histogram(
+    "tutor_diagram_render_seconds",
+    "Mermaid to SVG render time",
+    buckets=[0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0],
+)
+
+PDF_GENERATION_LATENCY = Histogram(
+    "tutor_pdf_generation_seconds",
+    "PDF report generation time",
+    buckets=[0.5, 1.0, 2.0, 5.0, 8.0, 15.0, 30.0, 60.0],
+)
+
+REPORT_DOWNLOADS = Counter(
+    "tutor_report_downloads_total",
+    "PDF report downloads",
+)
+
 TURN_LATENCY = Histogram(
     "tutor_turn_latency_seconds",
     "End-to-end latency per dialogue turn",

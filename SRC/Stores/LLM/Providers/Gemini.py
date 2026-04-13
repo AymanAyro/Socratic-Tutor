@@ -1,10 +1,38 @@
 import asyncio
 from collections.abc import AsyncIterator
+from typing import Any
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from Stores.LLM.langchain_factory import build_chat_gemini, get_langchain_embeddings
 from config import get_settings
+
+
+def _stringify_lc_content(content: Any) -> str:
+    """Normalize LangChain message content (str or list of text blocks from Gemini/Gemma)."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts: list[str] = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                t = block.get("text")
+                if isinstance(t, str):
+                    parts.append(t)
+                else:
+                    inner = block.get("content")
+                    if isinstance(inner, str):
+                        parts.append(inner)
+            else:
+                t = getattr(block, "text", None)
+                if isinstance(t, str):
+                    parts.append(t)
+        return "".join(parts).strip()
+    return str(content).strip()
 
 
 def _usage_tokens(msg) -> int:
@@ -46,7 +74,8 @@ class GeminiClient:
 
         def _run() -> tuple[str, int]:
             out = chat.invoke(messages)
-            text = (out.content or "").strip() if hasattr(out, "content") else str(out).strip()
+            raw = getattr(out, "content", out) if hasattr(out, "content") else out
+            text = _stringify_lc_content(raw)
             return text, _usage_tokens(out)
 
         return await asyncio.to_thread(_run)
@@ -68,8 +97,11 @@ class GeminiClient:
             parts: list[str] = []
             for chunk in chat.stream(messages):
                 c = getattr(chunk, "content", None)
-                if c:
-                    parts.append(c)
+                if c is None:
+                    continue
+                s = _stringify_lc_content(c)
+                if s:
+                    parts.append(s)
             return parts
 
         parts = await asyncio.to_thread(_collect)

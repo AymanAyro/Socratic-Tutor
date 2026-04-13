@@ -1,12 +1,21 @@
 import uuid
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from Controllers.SessionController import SessionController
-from Models.Schemas import SessionEndResponse, SessionHistoryItem, SessionStartRequest, SessionStartResponse, TurnOut, TurnRequest
+from Models.Schemas import (
+    ReflectRequest,
+    SessionEndResponse,
+    SessionHistoryItem,
+    SessionPhaseOut,
+    SessionStartRequest,
+    SessionStartResponse,
+    TurnOut,
+    TurnRequest,
+)
 from database import AsyncSessionLocal, get_db
 from deps import get_redis
 
@@ -15,11 +24,21 @@ router = APIRouter(prefix="/session", tags=["session"])
 
 @router.post("/start", response_model=SessionStartResponse)
 async def start_session(
+    request: Request,
     body: SessionStartRequest,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ):
     ctrl = SessionController()
-    return await ctrl.start_session(db, body)
+    g = getattr(request.app.state, "teaching_graph", None)
+    store = getattr(request.app.state, "stage2_asset_store", None)
+    return await ctrl.start_session(
+        db,
+        body,
+        redis=redis,
+        teaching_graph=g,
+        stage2_asset_store=store,
+    )
 
 
 @router.get("/history", response_model=list[SessionHistoryItem])
@@ -41,18 +60,95 @@ async def session_turns(
     return await ctrl.list_turns(db, session_id)
 
 
+@router.get("/{session_id}/phase", response_model=SessionPhaseOut)
+async def session_phase(
+    request: Request,
+    session_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    ctrl = SessionController()
+    g = getattr(request.app.state, "teaching_graph", None)
+    store = getattr(request.app.state, "stage2_asset_store", None)
+    return await ctrl.get_teaching_phase(
+        db,
+        session_id,
+        teaching_graph=g,
+        stage2_asset_store=store,
+    )
+
+
+@router.get("/{session_id}/diagram/{concept_id}")
+async def session_diagram(
+    request: Request,
+    session_id: uuid.UUID,
+    concept_id: uuid.UUID,
+):
+    store = getattr(request.app.state, "stage2_asset_store", {})
+    slot = store.get(str(session_id), {})
+    svg = slot.get("diagram_svg") or ""
+    return PlainTextResponse(svg or "<!-- pending -->", media_type="image/svg+xml")
+
+
+@router.post("/{session_id}/reveal", response_model=SessionPhaseOut)
+async def session_reveal_early(
+    request: Request,
+    session_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+):
+    ctrl = SessionController()
+    g = getattr(request.app.state, "teaching_graph", None)
+    store = getattr(request.app.state, "stage2_asset_store", None)
+    return await ctrl.reveal_early(
+        db,
+        session_id,
+        teaching_graph=g,
+        stage2_asset_store=store,
+        redis=redis,
+    )
+
+
+@router.post("/{session_id}/reflect", response_model=SessionPhaseOut)
+async def session_reflect(
+    request: Request,
+    session_id: uuid.UUID,
+    body: ReflectRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    ctrl = SessionController()
+    g = getattr(request.app.state, "teaching_graph", None)
+    store = getattr(request.app.state, "stage2_asset_store", None)
+    return await ctrl.submit_reflect(
+        db,
+        session_id,
+        body,
+        teaching_graph=g,
+        stage2_asset_store=store,
+    )
+
+
 @router.post("/{session_id}/turn")
 async def session_turn(
+    request: Request,
     session_id: uuid.UUID,
     body: TurnRequest,
     redis: Redis = Depends(get_redis),
 ):
     ctrl = SessionController()
+    g = getattr(request.app.state, "teaching_graph", None)
+    store = getattr(request.app.state, "stage2_asset_store", None)
 
     async def gen():
         async with AsyncSessionLocal() as db:
             try:
-                async for chunk in ctrl.stream_turn(db, redis, session_id, body.answer):
+                async for chunk in ctrl.stream_turn(
+                    db,
+                    redis,
+                    session_id,
+                    body.answer,
+                    teaching_graph=g,
+                    stage2_asset_store=store,
+                ):
                     yield chunk
                 await db.commit()
             except Exception:
@@ -64,8 +160,18 @@ async def session_turn(
 
 @router.post("/{session_id}/end", response_model=SessionEndResponse)
 async def end_session(
+    request: Request,
     session_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ):
     ctrl = SessionController()
-    return await ctrl.end_session(db, session_id)
+    g = getattr(request.app.state, "teaching_graph", None)
+    store = getattr(request.app.state, "stage2_asset_store", None)
+    return await ctrl.end_session(
+        db,
+        session_id,
+        teaching_graph=g,
+        stage2_asset_store=store,
+        redis=redis,
+    )

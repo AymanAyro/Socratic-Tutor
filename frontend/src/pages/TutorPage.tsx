@@ -1,7 +1,18 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
-import { endSession, startSession, streamTurn, type ExamResult, type SessionMode } from "../api/session";
+import {
+  endSession,
+  fetchReportStatus,
+  fetchSessionPhase,
+  reportPdfUrl,
+  revealEarly,
+  startSession,
+  streamTurn,
+  submitReflect,
+  type ExamResult,
+  type SessionMode,
+} from "../api/session";
 import ChatBubble from "../components/chat/ChatBubble";
 import InputBar from "../components/chat/InputBar";
 import TypingIndicator from "../components/chat/TypingIndicator";
@@ -14,6 +25,43 @@ type ExamLiveMeta = {
   turnIndex: number;
   target: number;
 };
+
+function stage2PhaseHint(phase: string): string {
+  switch (phase) {
+    case "PROBE":
+      return "You answer in your own words; the tutor keeps asking until you hit the minimum turns or a cap, then you get the model answer.";
+    case "REVEAL":
+      return "Reference answer (and diagram when available). Next: rate how well you understood.";
+    case "REFLECT":
+      return "Pick 1–5 to unlock one short question that checks you understood the explanation.";
+    case "CONSOLIDATE":
+      return "Answer the consolidation question; the arc finishes when your understanding checks out.";
+    case "END":
+      return "This concept arc is complete. End the session or restart to study again.";
+    default:
+      return "";
+  }
+}
+
+function applyRevealDiagram(
+  rev: Record<string, unknown> | undefined,
+  setRevealHtml: (s: string | null) => void,
+  setDiagramNote: (s: string | null) => void
+) {
+  const svg = rev?.concept_diagram_svg;
+  const failed = Boolean(rev?.diagram_failed);
+  if (typeof svg === "string" && svg.trim()) {
+    setRevealHtml(svg);
+    setDiagramNote(null);
+    return;
+  }
+  setRevealHtml(null);
+  setDiagramNote(
+    failed
+      ? "No diagram could be generated for this concept. You still have the full text explanation."
+      : "No diagram is available for this concept; rely on the written explanation."
+  );
+}
 
 export default function TutorPage() {
   const {
@@ -35,6 +83,12 @@ export default function TutorPage() {
   const [examLive, setExamLive] = useState<ExamLiveMeta | null>(null);
   const [examFinal, setExamFinal] = useState<ExamResult | null>(null);
   const [lastClassState, setLastClassState] = useState<string | null>(null);
+  const [useStage2, setUseStage2] = useState(true);
+  const [stage2Active, setStage2Active] = useState(false);
+  const [teachingPhase, setTeachingPhase] = useState<string | null>(null);
+  const [revealHtml, setRevealHtml] = useState<string | null>(null);
+  const [diagramNote, setDiagramNote] = useState<string | null>(null);
+  const [reportReadyUrl, setReportReadyUrl] = useState<string | null>(null);
 
   const startMut = useMutation({
     mutationFn: async () => {
@@ -43,6 +97,7 @@ export default function TutorPage() {
         concept_id: conceptId,
         user_id: userId,
         session_mode: sessionMode,
+        use_stage2: sessionMode === "socratic" && useStage2,
       });
     },
     onSuccess: (data) => {
@@ -53,14 +108,25 @@ export default function TutorPage() {
       setExamLive(null);
       setExamFinal(null);
       setLastClassState(null);
+      setStage2Active(!!data.use_stage2);
+      setTeachingPhase(data.teaching_phase ?? (data.use_stage2 ? "PROBE" : null));
+      setRevealHtml(null);
+      setDiagramNote(null);
+      setReportReadyUrl(null);
       appendMessage({ role: "tutor", text: data.opening_question });
     },
   });
 
   const endMut = useMutation({
     mutationFn: async (sid: string) => endSession(sid),
-    onSuccess: (data) => {
+    onSuccess: async (data, sid) => {
       if (data.exam) setExamFinal(data.exam);
+      try {
+        const st = await fetchReportStatus(sid);
+        if (st.status === "ready") setReportReadyUrl(reportPdfUrl(sid));
+      } catch {
+        /* ignore */
+      }
     },
   });
 
@@ -70,18 +136,19 @@ export default function TutorPage() {
     setTyping(true);
     setRegen(false);
     let tutorStarted = false;
+    let revealMode = false;
     try {
-      await streamTurn(
-        sessionId,
-        text,
-        (chunk) => {
-          if (!tutorStarted) {
-            tutorStarted = true;
-            appendMessage({ role: "tutor", text: "" });
+      await streamTurn(sessionId, text, {
+        onToken: (chunk) => {
+          if (!revealMode) {
+            if (!tutorStarted) {
+              tutorStarted = true;
+              appendMessage({ role: "tutor", text: "" });
+            }
+            appendTutorChunk(chunk);
           }
-          appendTutorChunk(chunk);
         },
-        (meta) => {
+        onMeta: (meta) => {
           if (typeof meta.classifier_state === "string") {
             setLastClassState(meta.classifier_state);
           }
@@ -93,9 +160,33 @@ export default function TutorPage() {
               target: (meta.exam_target_turns as number) ?? 5,
             });
           }
+          if (typeof meta.phase === "string") setTeachingPhase(meta.phase as string);
         },
-        () => setRegen(true)
-      );
+        onRegenerating: () => setRegen(true),
+        onRevealStart: () => {
+          revealMode = true;
+          appendMessage({ role: "tutor", text: "" });
+        },
+        onRevealChunk: (c) => {
+          appendTutorChunk(c);
+        },
+        onRevealDone: (payload) => {
+          const rev = payload.reveal as Record<string, unknown> | undefined;
+          applyRevealDiagram(rev, setRevealHtml, setDiagramNote);
+          if (typeof payload.phase === "string") setTeachingPhase(payload.phase as string);
+        },
+      });
+      if (stage2Active) {
+        try {
+          const ph = await fetchSessionPhase(sessionId);
+          setTeachingPhase(ph.phase);
+          if (ph.last_reveal) {
+            applyRevealDiagram(ph.last_reveal as Record<string, unknown>, setRevealHtml, setDiagramNote);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
     } finally {
       setTyping(false);
     }
@@ -155,7 +246,61 @@ export default function TutorPage() {
             summary.
           </p>
         )}
+        {sessionMode === "socratic" && !sessionId && (
+          <label className="flex items-center gap-2 text-xs text-ink-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={useStage2}
+              onChange={(e) => setUseStage2(e.target.checked)}
+              className="rounded border-mist-300"
+            />
+            Stage 2 phased session (reveal, reflection, PDF report)
+          </label>
+        )}
       </div>
+
+      {stage2Active && sessionId && teachingPhase && (
+        <div className="text-xs text-ink-500">
+          <p>
+            Phase: <span className="font-semibold text-ink-800">{teachingPhase}</span>
+          </p>
+          {(() => {
+            const hint = stage2PhaseHint(teachingPhase);
+            return hint ? (
+              <p className="mt-1 text-ink-600 leading-snug max-w-2xl">{hint}</p>
+            ) : null;
+          })()}
+          {teachingPhase === "PROBE" && (
+            <button
+              type="button"
+              className="ml-3 underline text-accent hover:text-accent/80"
+              onClick={async () => {
+                if (!sessionId) return;
+                try {
+                  const ph = await revealEarly(sessionId);
+                  setTeachingPhase(ph.phase);
+                  if (ph.last_reveal?.ideal_answer) {
+                    appendMessage({
+                      role: "tutor",
+                      text: String(ph.last_reveal.ideal_answer ?? ""),
+                    });
+                  }
+                  if (ph.last_reveal) {
+                    applyRevealDiagram(ph.last_reveal as Record<string, unknown>, setRevealHtml, setDiagramNote);
+                  }
+                } catch (e) {
+                  appendMessage({
+                    role: "tutor",
+                    text: (e as Error).message,
+                  });
+                }
+              }}
+            >
+              Reveal now
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-2">
         <motion.button
@@ -168,6 +313,18 @@ export default function TutorPage() {
         >
           {sessionId ? "Restart session" : "Start session"}
         </motion.button>
+        {sessionId && stage2Active && (
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            type="button"
+            className="rounded-xl border border-mist-200 px-4 py-2 text-sm text-ink-600"
+            disabled={endMut.isPending}
+            onClick={() => sessionId && endMut.mutate(sessionId)}
+          >
+            End &amp; report
+          </motion.button>
+        )}
         {sessionId && activeMode === "exam_prep" && (
           <motion.button
             whileHover={{ scale: 1.03 }}
@@ -295,6 +452,56 @@ export default function TutorPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {reportReadyUrl && (
+        <a
+          href={reportReadyUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex text-sm text-accent underline"
+        >
+          Open session report
+        </a>
+      )}
+
+      {revealHtml && (
+        <div
+          className="rounded-xl border border-mist-200 bg-white p-3 overflow-x-auto max-h-64 text-sm [&_svg]:max-h-52"
+          dangerouslySetInnerHTML={{ __html: revealHtml }}
+        />
+      )}
+      {diagramNote && !revealHtml && (
+        <p className="rounded-xl border border-mist-200 bg-mist-50/80 px-3 py-2 text-sm text-ink-600">{diagramNote}</p>
+      )}
+
+      {stage2Active && sessionId && teachingPhase === "REFLECT" && (
+        <div className="rounded-xl border border-accent/30 bg-accent-50/50 p-3 text-sm">
+          <p className="text-ink-700 mb-2">How well do you feel you understood this concept? (1–5)</p>
+          <div className="flex flex-wrap gap-2">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                type="button"
+                className="rounded-lg border border-mist-200 bg-white px-3 py-1.5 text-sm font-medium hover:border-accent"
+                onClick={async () => {
+                  if (!sessionId) return;
+                  try {
+                    const ph = await submitReflect(sessionId, n);
+                    setTeachingPhase(ph.phase);
+                    if (ph.last_tutor_plain) {
+                      appendMessage({ role: "tutor", text: ph.last_tutor_plain });
+                    }
+                  } catch (e) {
+                    appendMessage({ role: "tutor", text: (e as Error).message });
+                  }
+                }}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="rounded-2xl border border-mist-200 bg-white/80 shadow-sm p-4 min-h-[320px] flex flex-col">
         <div className="flex-1 space-y-3 overflow-y-auto max-h-[480px] pr-1">

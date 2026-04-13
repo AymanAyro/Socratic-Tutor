@@ -34,6 +34,11 @@ class TutorSession(Base):
     summary_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     opening_question: Mapped[str | None] = mapped_column(Text, nullable=True)
     session_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="socratic")
+    use_stage2: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    teaching_phase: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    self_rating: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    report_pdf_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    report_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     turns: Mapped[list["Turn"]] = relationship(back_populates="session")
     mastery_scores: Mapped[list["MasteryScore"]] = relationship(back_populates="session")

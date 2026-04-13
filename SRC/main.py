@@ -9,25 +9,57 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from config import get_settings
-from logging_setup import setup_logging
+from logging_setup import ACCESS_LOGGER_NAME, setup_logging
+from Engine.graph import build_teaching_graph
 from Routes.Content import router as content_router
 from Routes.Eval import router as eval_router
 from Routes.Health import router as health_router
 from Routes.Progress import router as progress_router
 from Routes.Project import router as project_router
+from Routes.Report import router as report_router
 from Routes.Session import router as session_router
 
 logger = logging.getLogger(__name__)
+_access = logging.getLogger(ACCESS_LOGGER_NAME)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     setup_logging()
-    logger.info("Socratic Tutor API starting (log_level=%s)", get_settings().log_level)
+    settings = get_settings()
+    logger.info("Socratic Tutor API starting (log_level=%s)", settings.log_level)
+    app.state.stage2_asset_store = {}
+    app.state.checkpoint_pool = None
+    if settings.langgraph_checkpoint_backend.lower() == "postgres":
+        from psycopg.rows import dict_row
+        from psycopg_pool import AsyncConnectionPool
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+        pool = AsyncConnectionPool(
+            conninfo=settings.postgres_checkpoint_conninfo,
+            kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+            open=True,
+            min_size=1,
+            max_size=10,
+        )
+        checkpointer = AsyncPostgresSaver(pool)
+        await checkpointer.setup()
+        app.state.checkpoint_pool = pool
+        app.state.teaching_checkpointer = checkpointer
+    else:
+        from langgraph.checkpoint.memory import MemorySaver
+
+        app.state.teaching_checkpointer = MemorySaver()
+
+    app.state.teaching_graph = build_teaching_graph(app.state.teaching_checkpointer)
     logger.info(
-        "Tip: each HTTP request prints '->' and '<-' in this terminal; try GET /api/v1/health/live or open /docs"
+        "Per-request lines: terminal (-> / <-) and access.log in the API working directory "
+        "(if the terminal stays quiet, tail access.log - traffic may be hitting another process on :8000)."
     )
     yield
+    pool = getattr(app.state, "checkpoint_pool", None)
+    if pool is not None:
+        await pool.close()
     logger.info("Socratic Tutor API shutdown")
 
 
@@ -46,15 +78,15 @@ app.add_middleware(
 @app.middleware("http")
 async def request_logging_middleware(request: Request, call_next):
     path = request.url.path
-    logger.info("-> %s %s", request.method, path)
+    _access.info("-> %s %s", request.method, path)
     start = time.perf_counter()
     try:
         response = await call_next(request)
     except Exception:
-        logger.exception("<- FAILED %s %s", request.method, path)
+        _access.exception("<- FAILED %s %s", request.method, path)
         raise
     elapsed_ms = (time.perf_counter() - start) * 1000
-    logger.info(
+    _access.info(
         "<- %s %s %s %.1fms",
         request.method,
         path,
@@ -68,6 +100,7 @@ api_prefix = "/api/v1"
 app.include_router(health_router, prefix=api_prefix)
 app.include_router(content_router, prefix=api_prefix)
 app.include_router(session_router, prefix=api_prefix)
+app.include_router(report_router, prefix=api_prefix)
 app.include_router(progress_router, prefix=api_prefix)
 app.include_router(project_router, prefix=api_prefix)
 app.include_router(eval_router, prefix=api_prefix)

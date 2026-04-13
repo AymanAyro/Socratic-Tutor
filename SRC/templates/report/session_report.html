@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Session report — {{ concept_name }}</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="hdr">
+    <h1>Session report</h1>
+    <p class="meta">Session {{ session_id }} · {{ concept_name }}</p>
+  </header>
+
+  <section class="block">
+    <h2>Performance summary</h2>
+    <table class="grid">
+      <tr><th>Probe turns</th><td>{{ probe_turns }}</td></tr>
+      <tr><th>Self-rating (1–5)</th><td>{% if self_rating is defined and self_rating is not none %}{{ self_rating }}{% else %}—{% endif %}</td></tr>
+      <tr><th>Last classifier confidence</th><td>{% if classifier_confidence is defined and classifier_confidence is not none %}{{ "%.2f"|format(classifier_confidence) }}{% else %}—{% endif %}</td></tr>
+      <tr><th>Overall</th><td>{{ analyst.get("overall_performance", "—") }}</td></tr>
+    </table>
+  </section>
+
+  {% if diagram_svg %}
+  <section class="block">
+    <h2>Concept diagram</h2>
+    <div class="diagram">{{ diagram_svg|safe }}</div>
+  </section>
+  {% endif %}
+
+  <section class="block">
+    <h2>Model answer</h2>
+    <p class="answer">{{ ideal_answer }}</p>
+  </section>
+
+  <section class="block">
+    <h2>Dialogue turns</h2>
+    <ol>
+      {% for t in turns %}
+      <li><strong>{{ t.classifier_state }}</strong> — {{ t.student_input[:200] }}{% if t.student_input|length > 200 %}…{% endif %}</li>
+      {% endfor %}
+    </ol>
+  </section>
+
+  <section class="block">
+    <h2>Insight</h2>
+    <p>{{ analyst.get("insight", "") }}</p>
+  </section>
+
+  <section class="block">
+    <h2>Recommendations</h2>
+    <ul>
+      {% for r in analyst.get("recommendations", []) %}
+      <li>{{ r }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+</body>
+</html>

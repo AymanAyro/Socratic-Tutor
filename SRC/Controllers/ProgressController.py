@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from Models.Content import Concept
 from Models.Session import MasteryScore, TutorSession
-from Models.Schemas import DueConceptOut, MasteryOut
+from Models.Schemas import DueConceptOut, MasteryOut, ProgressHistoryOut
 
 
 class ProgressController:
@@ -54,3 +54,10 @@ class ProgressController:
             await db.execute(select(TutorSession).where(TutorSession.id == session_id))
         ).scalar_one_or_none()
         return s.summary_text if s else None
+
+    async def user_history(self, db: AsyncSession, user_id: uuid.UUID) -> ProgressHistoryOut:
+        from Controllers.SessionController import SessionController
+
+        mastery = await self.mastery_for_user(db, user_id)
+        sessions = await SessionController().list_sessions(db, user_id=user_id)
+        return ProgressHistoryOut(mastery=mastery, sessions=sessions)
