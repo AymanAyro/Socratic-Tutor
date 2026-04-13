@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Session Report - Artificial Intelligence</title>
+  <style>:root {
+  --color-bg: #ffffff;
+  --color-text: #1c1f26;
+  --color-muted: #5f677a;
+  --color-border: #d8dce6;
+  --color-surface: #f7f8fc;
+  --color-accent: #5b63f6;
+  --color-alert: #fff2c2;
+  --radius: 8pt;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: var(--color-text);
+  background: var(--color-bg);
+  font-family: Inter, Arial, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.5;
+  padding: 12mm;
+}
+
+.report-header {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1pt solid var(--color-border);
+  padding-bottom: 4mm;
+  margin-bottom: 6mm;
+}
+
+.brand { font-weight: 700; color: var(--color-accent); }
+.subtitle, .session-id { color: var(--color-muted); margin: 0; }
+.section { margin-bottom: 6mm; }
+.section h2 { margin: 0 0 3mm 0; font-size: 12pt; }
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2.5mm;
+}
+
+.metric-card {
+  border: 1pt solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  padding: 3mm;
+}
+.metric-value { font-size: 14pt; font-weight: 700; }
+.metric-label { font-size: 9pt; color: var(--color-muted); }
+.metric-card--highlight { border-color: var(--color-accent); }
+
+.alert--yellow {
+  margin-top: 3mm;
+  background: var(--color-alert);
+  border: 1pt solid #edc852;
+  border-radius: var(--radius);
+  padding: 2.5mm;
+}
+
+.turn-timeline { display: flex; flex-wrap: wrap; gap: 2mm; }
+.timeline-dot {
+  text-decoration: none;
+  color: inherit;
+  border: 1pt solid var(--color-border);
+  border-radius: 99pt;
+  padding: 1.5mm 2.5mm;
+  font-size: 9pt;
+}
+.dot-number { font-weight: 700; margin-right: 1.5mm; }
+
+.reveal-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3mm;
+}
+
+.reveal-answer, .reveal-diagram {
+  border: 1pt solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  padding: 3mm;
+}
+
+.diagram-container svg {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.turn-card {
+  border: 1pt solid var(--color-border);
+  border-radius: var(--radius);
+  margin-bottom: 3mm;
+  overflow: hidden;
+}
+
+.turn-card-header, .turn-student, .turn-correct, .turn-diagram, .turn-tutor, .turn-gap { padding: 2.5mm; }
+.turn-card-header { background: var(--color-surface); }
+.turn-role { color: var(--color-muted); font-size: 8.5pt; display: block; margin-bottom: 1mm; }
+.turn-gap { background: #fff8e6; border-top: 1pt solid #f3df9b; }
+.turn-correct { background: #eef8ff; border-top: 1pt solid #d3e7ff; }
+.turn-diagram { border-top: 1pt solid var(--color-border); }
+.diagram-fallback {
+  border: 1pt dashed var(--color-border);
+  border-radius: 6pt;
+  padding: 2.5mm;
+  color: var(--color-muted);
+  background: #f8f9fc;
+}
+
+.insight-callout {
+  border-left: 3pt solid var(--color-accent);
+  background: var(--color-surface);
+  padding: 3mm;
+}
+
+.reco-grid { display: grid; gap: 2mm; }
+.reco-card {
+  border: 1pt solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  padding: 2.5mm;
+}
+.reco-number { font-weight: 700; margin-right: 2mm; }
+
+.review-schedule { display: grid; gap: 2mm; }
+.review-item {
+  border: 1pt solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 2.5mm;
+}
+.review-concept { font-weight: 600; }
+.review-date { color: var(--color-muted); float: right; }
+.mastery-bar {
+  margin-top: 1.5mm;
+  height: 2.5mm;
+  background: #e7eaf3;
+  border-radius: 99pt;
+  overflow: hidden;
+}
+.mastery-fill {
+  height: 100%;
+  background: var(--color-accent);
+}
+
+@media print {
+  .turn-card, .review-item, .metric-card { break-inside: avoid; }
+}
+</style>
+</head>
+<body>
+<header class="report-header">
+  <div class="brand">Socratic Tutor</div>
+  <div class="meta">
+    <h1>Session Report</h1>
+    <p class="subtitle">AI Tutoring Apr 13 · Apr 13 - Apr 13, 2026</p>
+    <p class="session-id">Session dbb09459</p>
+  </div>
+</header>
+
+<section class="section">
+  <h2>Performance Overview</h2>
+  <div class="metric-grid">
+    <div class="metric-card">
+      <span class="metric-value">6</span>
+      <span class="metric-label">Exploration turns</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-value">3 / 5</span>
+      <span class="metric-label">Your self-rating</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-value">95%</span>
+      <span class="metric-label">Assessed confidence</span>
+    </div>
+    <div class="metric-card metric-card--highlight">
+      <span class="metric-value">struggling</span>
+      <span class="metric-label">Overall</span>
+    </div>
+  </div>
+  
+  <div class="alert alert--yellow">
+    Your self-rating was notably higher than your responses indicated. See the AI insight below.
+  </div>
+  
+</section>
+
+<section class="section">
+  <h2>Understanding Journey</h2>
+  <div class="turn-timeline">
+    
+    <a href="#turn-1" class="timeline-dot timeline-dot--correct">
+      <span class="dot-number">1</span>
+      <span class="dot-label">Got it</span>
+    </a>
+    
+    <a href="#turn-2" class="timeline-dot timeline-dot--stuck">
+      <span class="dot-number">2</span>
+      <span class="dot-label">Still working on it</span>
+    </a>
+    
+    <a href="#turn-3" class="timeline-dot timeline-dot--correct">
+      <span class="dot-number">3</span>
+      <span class="dot-label">Got it</span>
+    </a>
+    
+    <a href="#turn-4" class="timeline-dot timeline-dot--stuck">
+      <span class="dot-number">4</span>
+      <span class="dot-label">Still working on it</span>
+    </a>
+    
+    <a href="#turn-5" class="timeline-dot timeline-dot--partial">
+      <span class="dot-number">5</span>
+      <span class="dot-label">Getting there</span>
+    </a>
+    
+    <a href="#turn-6" class="timeline-dot timeline-dot--stuck">
+      <span class="dot-number">6</span>
+      <span class="dot-label">Still working on it</span>
+    </a>
+    
+    <a href="#turn-7" class="timeline-dot timeline-dot--correct">
+      <span class="dot-number">7</span>
+      <span class="dot-label">Got it</span>
+    </a>
+    
+  </div>
+</section>
+
+<section class="section section--reveal">
+  <h2>Concept Explanation</h2>
+  <div class="reveal-grid">
+    <div class="reveal-answer">
+      <h3>Model Answer</h3>
+      <p>Artificial Intelligence (AI) is the ability of a computer or machine to perform tasks that typically require human intelligence. While standard computer programs follow a fixed set of rules, AI allows machines to learn from experience and adapt to new information.
+
+This technology enables computers to do things like recognize speech, identify objects in images, and solve complex problems. For example, when a voice assistant understands your question or a streaming service suggests a song you might enjoy, they are using AI to analyze patterns in data. By processing large amounts of information, AI can make predictions and decisions, helping technology become more helpful and intuitive in our daily lives.</p>
+    </div>
+    
+    <div class="reveal-diagram">
+      <h3>Concept Diagram</h3>
+      <div class="diagram-container">
+        <g></g>
+      </div>
+    </div>
+    
+  </div>
+</section>
+
+<section class="section">
+  <h2>Dialogue Breakdown</h2>
+  
+  <div id="turn-1" class="turn-card turn-card--correct">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 1</span>
+      <span class="turn-badge turn-badge--correct">
+        Got it
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>What it means is to be able to recognize patterns and solve different tasks on new data or inputs it sees not according a programmatic code that just runs.</p>
+    </div>
+    <div class="turn-correct">
+      <span class="turn-role">Correct answer</span>
+      <p>Correct answer unavailable for this turn.</p>
+    </div>
+    <div class="turn-diagram">
+      <span class="turn-role">Diagram</span>
+      
+      <div class="diagram-fallback">Diagram unavailable</div>
+      
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">If a system is designed to excel at one specific task, like predicting weather patterns, but cannot perform any othertask, does that still qualify as &#34;intelligent&#34; under your definition?</p>
+    </div>
+  </div>
+  
+  <div id="turn-2" class="turn-card turn-card--stuck">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 2</span>
+      <span class="turn-badge turn-badge--stuck">
+        Still working on it
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>So?</p>
+    </div>
+    <div class="turn-correct">
+      <span class="turn-role">Correct answer</span>
+      <p>Correct answer unavailable for this turn.</p>
+    </div>
+    <div class="turn-diagram">
+      <span class="turn-role">Diagram</span>
+      
+      <div class="diagram-fallback">Diagram unavailable</div>
+      
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">If you compare a toolthat only translates languages to a human who can translate, cook, and drive, are they both &#34;intelligent&#34; in thesame way?</p>
+    </div>
+  </div>
+  
+  <div id="turn-3" class="turn-card turn-card--correct">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 3</span>
+      <span class="turn-badge turn-badge--correct">
+        Got it
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>No, that tool does a very specific task it was designed for, while the human maintains a general intelligence to learn, adapt, and develop new skills.</p>
+    </div>
+    <div class="turn-correct">
+      <span class="turn-role">Correct answer</span>
+      <p>Correct answer unavailable for this turn.</p>
+    </div>
+    <div class="turn-diagram">
+      <span class="turn-role">Diagram</span>
+      
+      <div class="diagram-fallback">Diagram unavailable</div>
+      
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">If a system could simulate general intelligence so convincingly that a human could not tell it apart from another person, wouldthat simulation be equivalent to actually possessing intelligence?</p>
+    </div>
+  </div>
+  
+  <div id="turn-4" class="turn-card turn-card--stuck">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 4</span>
+      <span class="turn-badge turn-badge--stuck">
+        Still working on it
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>Yes.</p>
+    </div>
+    <div class="turn-correct">
+      <span class="turn-role">Correct answer</span>
+      <p>Correct answer unavailable for this turn.</p>
+    </div>
+    <div class="turn-diagram">
+      <span class="turn-role">Diagram</span>
+      
+      <div class="diagram-fallback">Diagram unavailable</div>
+      
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">How does a system that learns from examples differ fromone that simply follows a list of pre-defined rules?</p>
+    </div>
+  </div>
+  
+  <div id="turn-5" class="turn-card turn-card--partial">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 5</span>
+      <span class="turn-badge turn-badge--partial">
+        Getting there
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>The first one actually adapts to new examples and has the ability to see patterns if faced with similar issues, meanwhile the one that simply follows rules would only be able to give results in those rules loop.</p>
+    </div>
+    <div class="turn-correct">
+      <span class="turn-role">Correct answer</span>
+      <p>Correct answer unavailable for this turn.</p>
+    </div>
+    <div class="turn-diagram">
+      <span class="turn-role">Diagram</span>
+      
+      <div class="diagram-fallback">Diagram unavailable</div>
+      
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">Considering both the rule-following systems and the pattern-learning systems you&#39;ve described, how would you define theoverarching concept of Artificial Intelligence?</p>
+    </div>
+  </div>
+  
+  <div id="turn-6" class="turn-card turn-card--stuck">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 6</span>
+      <span class="turn-badge turn-badge--stuck">
+        Still working on it
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>I don&#39;t know.</p>
+    </div>
+    <div class="turn-correct">
+      <span class="turn-role">Correct answer</span>
+      <p>Correct answer unavailable for this turn.</p>
+    </div>
+    <div class="turn-diagram">
+      <span class="turn-role">Diagram</span>
+      
+      <div class="diagram-fallback">Diagram unavailable</div>
+      
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">[Reveal — Socratic phase complete.]</p>
+    </div>
+  </div>
+  
+  <div id="turn-7" class="turn-card turn-card--correct">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 7</span>
+      <span class="turn-badge turn-badge--correct">
+        Got it
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>A computer follows a fixed set of rules, while the AI has the ability to do tasks that require human intelligence.</p>
+    </div>
+    <div class="turn-correct">
+      <span class="turn-role">Correct answer</span>
+      <p>Correct answer unavailable for this turn.</p>
+    </div>
+    <div class="turn-diagram">
+      <span class="turn-role">Diagram</span>
+      
+      <div class="diagram-fallback">Diagram unavailable</div>
+      
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">[Consolidation check.]</p>
+    </div>
+  </div>
+  
+</section>
+
+<section class="section">
+  <h2>AI Insight</h2>
+  <div class="insight-callout">
+    <p>The student demonstrates an inconsistent understanding of Artificial Intelligence, frequently becoming stuck after initial correct responses. There is a notable discrepancy between their self-rating and actual performance, suggesting they may be overestimating their understanding.</p>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Recommendations</h2>
+  <div class="reco-grid">
+    
+    <div class="reco-card">
+      <span class="reco-number">1</span>
+      <p>Revisit the fundamental definitions and core principles of Artificial Intelligence to build a more stable knowledge base.</p>
+    </div>
+    
+    <div class="reco-card">
+      <span class="reco-number">2</span>
+      <p>Engage in scaffolded practice exercises that move from simple to complex AI concepts to reduce the frequency of getting stuck.</p>
+    </div>
+    
+    <div class="reco-card">
+      <span class="reco-number">3</span>
+      <p>Utilize active recall and self-testing to better align self-perception of mastery with actual performance.</p>
+    </div>
+    
+  </div>
+</section>
+
+<section class="section">
+  <h2>Next Review Schedule</h2>
+  <div class="review-schedule">
+    
+    <div class="review-item">
+      <span class="review-concept">Artificial Intelligence</span>
+      <span class="review-date">Review in 1 days (2026-04-14)</span>
+      <div class="mastery-bar">
+        <div class="mastery-fill" style="width: 43.99999999999999%"></div>
+      </div>
+    </div>
+    
+  </div>
+</section>
+</body>
+</html>

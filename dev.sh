@@ -22,6 +22,6 @@ docker compose -f docker-compose.dev.yml up
 
 echo ""
 echo "Dev infra is up (Postgres, Redis, Chroma, Prometheus, Grafana)."
-echo "Next: cd SRC && uv sync --extra dev && uv run alembic upgrade head && uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000"
+echo "Next: cd SRC && uv sync --extra dev && uv run playwright install chromium && uv run alembic upgrade head && uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000"
 echo "Verify data plane: ./scripts/verify-stack.sh http://127.0.0.1:8000 (after API is running)"
 echo "Ollama models: ollama pull gemma4:e2b && ollama pull qwen3-embedding:8b"

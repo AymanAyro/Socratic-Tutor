@@ -12,7 +12,7 @@ This is the usual path: **infra in Docker**, **API + Vite on the host**.
 
 2. **Wait for DB/cache:** Postgres and Redis have Docker healthchecks; give Chroma a few seconds on first start.
 
-3. **Backend:** `cd SRC && uv sync --extra dev && uv run alembic upgrade head && uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000`  
+3. **Backend:** `cd SRC && uv sync --extra dev && uv run playwright install chromium && uv run alembic upgrade head && uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000`  
    Use `uv sync --extra dev` so `pytest` is available. For **verbose terminal logs**, set `LOG_LEVEL=DEBUG` in `SRC/.env` (and optionally `SQLALCHEMY_ECHO=true` for SQL), or run Uvicorn with `--log-level debug`. Each request logs `->` / `<-` with status and timing; ingest logs KG + vector steps; unhandled errors print a full traceback. On **Windows**, if `curl` and the UI work but **your** uvicorn terminal never shows requests, an **orphan** uvicorn from Cursor/agent often still owns `:8000`: run `.\scripts\stop-socratic-uvicorn.ps1`, then start uvicorn again in the terminal you want to watch. On **Windows**, if the integrated terminal stops showing lines after startup while `curl` still works, drop `--reload` for that session or set `PYTHONUNBUFFERED=1` — another process may also be bound to `:8000` (e.g. Docker `fastapi`); check with `netstat -ano | findstr :8000`.
 
 4. **Verify data plane** (Postgres, Redis, Chroma reachable from the API):  

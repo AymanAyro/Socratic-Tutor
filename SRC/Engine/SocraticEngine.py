@@ -26,6 +26,7 @@ from Stats.Metrics import (
 )
 from Utils.ContextManager import TurnLike
 from Utils.StreamingHandler import collect_stream
+from Utils.tutor_output_sanitize import sanitize_tutor_output
 from config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -159,6 +160,7 @@ class SocraticEngine:
                 session_mode=session_mode,
             )
             question_text, _ = await collect_stream(stream)
+            question_text = sanitize_tutor_output(question_text)
             passes, gtokens = await self._guard.check_passes(
                 question_text, concept.name, session.id
             )

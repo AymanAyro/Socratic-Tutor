@@ -40,6 +40,18 @@ class ClassifierOutput(BaseModel):
             raise ValueError("invalid state")
         return v
 
+    @field_validator("gap")
+    @classmethod
+    def valid_gap(cls, v: str | None, info) -> str | None:
+        state = info.data.get("state") if info and info.data else None
+        if state in {"partial", "wrong"}:
+            if v is None or not str(v).strip():
+                raise ValueError("gap must be a non-empty string for partial/wrong")
+            return str(v).strip()
+        if state in {"correct", "stuck"}:
+            return None
+        return v
+
 
 @dataclass
 class ClassifierResult:
@@ -134,12 +146,20 @@ class UnderstandingClassifier:
                 out = ClassifierOutput.model_validate(data)
             except Exception:
                 logger.exception("Classifier fallback also failed, returning safe default")
-                return ClassifierResult(state="partial", confidence=0.5, gap=None, tokens_used=0)
+                return ClassifierResult(
+                    state="partial",
+                    confidence=0.5,
+                    gap=f"the student has not fully explained the core mechanism of {concept_name}",
+                    tokens_used=0,
+                )
 
+        gap = out.gap
+        if out.state in {"partial", "wrong"} and not (gap or "").strip():
+            gap = f"the student has not fully explained the core mechanism of {concept_name}"
         result = ClassifierResult(
             state=out.state,
             confidence=out.confidence,
-            gap=out.gap,
+            gap=gap,
             tokens_used=tokens,
         )
         if self._redis:

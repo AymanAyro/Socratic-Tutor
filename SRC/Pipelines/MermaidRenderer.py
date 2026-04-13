@@ -1,7 +1,9 @@
+import asyncio
 import logging
 import time
 
-from playwright.async_api import async_playwright
+from playwright._impl._errors import Error as PlaywrightError
+from playwright.sync_api import sync_playwright
 
 from Stats.Metrics import DIAGRAM_RENDER_LATENCY
 from config import get_settings
@@ -37,17 +39,37 @@ async def render_mermaid_to_svg(mermaid_code: str, fallback_label: str | None = 
     safe = (mermaid_code or "").replace("</script>", "<\\/script>")
     html = MERMAID_HTML_PREFIX + safe + MERMAID_HTML_SUFFIX
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            try:
-                page = await browser.new_page()
-                await page.set_content(html, timeout=int(settings.mermaid_render_timeout_seconds * 1000))
-                await page.wait_for_selector("svg", timeout=int(settings.mermaid_render_timeout_seconds * 1000))
-                svg = await page.inner_html("svg")
-            finally:
-                await browser.close()
+        timeout_ms = int(settings.mermaid_render_timeout_seconds * 1000)
+
+        def _render_sync() -> str | None:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page()
+                    page.set_content(html, timeout=timeout_ms)
+                    page.wait_for_selector("svg", timeout=timeout_ms)
+                    svg = page.inner_html("svg")
+                finally:
+                    browser.close()
+            return svg or None
+
+        svg = await asyncio.to_thread(_render_sync)
         DIAGRAM_RENDER_LATENCY.observe(time.perf_counter() - t0)
         return svg or None
+    except PlaywrightError as exc:
+        message = str(exc)
+        if "Executable doesn't exist" in message:
+            logger.error(
+                "Mermaid render failed: Playwright browser binaries are missing. "
+                "Install them with `uv run playwright install chromium` "
+                "(or `playwright install chromium` in the active venv)."
+            )
+        else:
+            logger.exception("Mermaid render failed")
+        DIAGRAM_RENDER_LATENCY.observe(time.perf_counter() - t0)
+        if fallback_label:
+            return fallback_diagram_svg(fallback_label)
+        return None
     except Exception:
         logger.exception("Mermaid render failed")
         DIAGRAM_RENDER_LATENCY.observe(time.perf_counter() - t0)

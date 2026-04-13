@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     # LLM
     generation_backend: str = "OLLAMA"  # GEMINI | OLLAMA
     embedding_backend: str = "OLLAMA"
-    classifier_model_id: str = "phi3:mini"
-    generation_model_id: str = "qwen2.5:7b"
+    classifier_model_id: str = "gemma4:e2b"
+    generation_model_id: str = "ministral-3:3b"
     embedding_model_id: str = "nomic-embed-text"
     ollama_base_url: str = "http://127.0.0.1:11434"
     gemini_api_key: str = Field(
@@ -38,6 +38,12 @@ class Settings(BaseSettings):
     )
     llm_repeat_penalty: float | None = Field(
         default=1.05, validation_alias=AliasChoices("LLM_REPEAT_PENALTY")
+    )
+    # Ollama reasoning control (None = provider default, False = disable where supported, True = enable).
+    # OLLAMA_THINK is kept as a legacy alias for older environment files.
+    ollama_reasoning: bool | None = Field(
+        default=None,
+        validation_alias=AliasChoices("OLLAMA_REASONING", "OLLAMA_THINK"),
     )
 
     # GCP / Vertex (optional; when set, Gemini uses Vertex instead of API key)

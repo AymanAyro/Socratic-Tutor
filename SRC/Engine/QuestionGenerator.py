@@ -94,6 +94,7 @@ class QuestionGenerator:
         opening_question: str | None,
         student_answer: str,
         session_mode: str = "socratic",
+        variation_hint: str | None = None,
     ) -> AsyncIterator[str]:
         concept = await self._load_concept(concept_id)
         rag_context = ""
@@ -110,7 +111,7 @@ class QuestionGenerator:
         except Exception:
             rag_context = ""
         rag_context = self._ctx.truncate_to_budget(rag_context, 3200)
-        memory = self._ctx.build_memory(memory_turns, opening_question)
+        memory = self._ctx.build_memory(memory_turns, opening_question) or "No prior turns."
         memory = self._ctx.truncate_to_budget(memory, 2400)
         previous_questions = format_previous_questions(memory_turns, opening_question)
 
@@ -125,7 +126,7 @@ class QuestionGenerator:
             SOCRATIC_USER_TEMPLATE,
             concept=concept.name,
             state=state,
-            gap=gap or "null",
+            gap=(gap.strip() if isinstance(gap, str) and gap.strip() else "none identified"),
             memory=memory,
             rag_context=rag_context or "(no retrieved chunks)",
             previous_questions=previous_questions,
@@ -134,8 +135,11 @@ class QuestionGenerator:
         prompt = (
             f"{user_context}\n\n"
             f'<LATEST_STUDENT_MESSAGE>\n"""{student_answer}"""\n</LATEST_STUDENT_MESSAGE>\n\n'
-            "Produce only your next single question (or micro-explain+question if MODE_LINE says so)."
+            "Produce only your next single question (or micro-explain+question if MODE_LINE says so). "
+            "Do not echo CONTEXT, MODE_LINE, or field labels; do not output planning or <channel|>."
         )
+        if variation_hint and variation_hint.strip():
+            prompt += f"\n\n<VARIATION_HINT>{variation_hint.strip()}</VARIATION_HINT>"
         try:
             async for chunk in self._gen.generate_stream(prompt, system=system):
                 yield chunk
@@ -181,7 +185,12 @@ class QuestionGenerator:
             previous_questions="(none — you are composing the opening question only.)",
             session_mode=session_mode,
         )
-        prompt = f"{user_context}\n\nAsk exactly one opening Socratic question to begin the session."
+        prompt = (
+            f"{user_context}\n\n"
+            "Ask exactly one opening Socratic question to begin the session. "
+            "Do not echo CONTEXT, MODE_LINE, or field labels; do not output planning or <channel|>; "
+            "output only the question."
+        )
         try:
             async for chunk in self._gen.generate_stream(prompt, system=system):
                 yield chunk

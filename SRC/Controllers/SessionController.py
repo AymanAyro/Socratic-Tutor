@@ -34,6 +34,7 @@ from Stores.LLM.factory import get_generation_client
 from Stats.Metrics import EXAM_SESSION_SCORE_PERCENT, QUESTIONS_PER_SESSION, SESSION_DURATION_SECONDS
 from Utils.ContextManager import TurnLike
 from Utils.StreamingHandler import collect_stream, sse_event
+from Utils.tutor_output_sanitize import sanitize_tutor_output
 from config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -140,7 +141,7 @@ class SessionController:
         opening_stream = engine.opening_question_stream(session, concept)
         try:
             opening_text, _ = await collect_stream(opening_stream)
-            session.opening_question = opening_text.strip()
+            session.opening_question = sanitize_tutor_output(opening_text)
         except Exception:
             logger.exception("Opening question generation failed session=%s", session.id)
             session.opening_question = (

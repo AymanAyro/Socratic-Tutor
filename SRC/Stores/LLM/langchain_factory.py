@@ -59,7 +59,18 @@ def build_chat_ollama(model: str, json_mode: bool = False):
         kwargs["repeat_penalty"] = s.llm_repeat_penalty
     if json_mode:
         kwargs["format"] = "json"
-    return ChatOllama(**kwargs)
+    reasoning = s.ollama_reasoning
+    chat_model_fields = getattr(ChatOllama, "model_fields", {}) or {}
+    if reasoning is not None and "reasoning" in chat_model_fields:
+        # Newer langchain_ollama versions expose `reasoning` directly on ChatOllama.
+        kwargs["reasoning"] = reasoning
+        return ChatOllama(**kwargs)
+
+    chat = ChatOllama(**kwargs)
+    if reasoning is not None:
+        # Older langchain_ollama versions can still forward `think` at request-time.
+        return chat.bind(think=reasoning)
+    return chat
 
 
 def _gemini_thinking_kwargs(settings: Settings) -> dict[str, Any]:
@@ -72,6 +83,14 @@ def _gemini_thinking_kwargs(settings: Settings) -> dict[str, Any]:
     if settings.gemini_thinking_budget is not None:
         out["thinking_budget"] = settings.gemini_thinking_budget
     return out
+
+
+def _gemini_api_model_supports_thinking_kw(model: str) -> bool:
+    """Gemma on the Gemini API does not accept Gemini 2.5/3 thinking_* fields; sending them yields 400 INVALID_ARGUMENT."""
+    base = (model or "").strip().lower()
+    if base.startswith("models/"):
+        base = base[len("models/") :]
+    return not base.startswith("gemma")
 
 
 def build_chat_gemini(model: str, json_mode: bool = False) -> Any:
@@ -93,7 +112,8 @@ def build_chat_gemini(model: str, json_mode: bool = False) -> Any:
         kwargs["location"] = s.google_cloud_location.strip() or "us-central1"
     elif s.gemini_api_key.strip():
         kwargs["google_api_key"] = s.gemini_api_key.strip()
-    kwargs.update(_gemini_thinking_kwargs(s))
+    if _gemini_api_model_supports_thinking_kw(model):
+        kwargs.update(_gemini_thinking_kwargs(s))
     if json_mode:
         kwargs["model_kwargs"] = {"response_mime_type": "application/json"}
     return ChatGoogleGenerativeAI(**kwargs)

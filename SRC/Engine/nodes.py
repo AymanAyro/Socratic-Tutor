@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import json
 import logging
 import time
@@ -38,6 +39,7 @@ from Stats.Metrics import (
 )
 from Utils.ContextManager import TurnLike
 from Utils.StreamingHandler import collect_stream
+from Utils.tutor_output_sanitize import sanitize_tutor_output
 from config import get_settings
 from database import AsyncSessionLocal
 from Engine.AntiAnswerGuard import AntiAnswerGuard
@@ -126,6 +128,17 @@ async def _generate_turn_clarification(
     question: str,
     prior_answer: str,
 ) -> None:
+    async def _generate_assets() -> tuple[str, str]:
+        clarification, mermaid = await asyncio.gather(
+            generate_clarification(topic, question, prior_answer),
+            generate_turn_diagram(topic, question),
+        )
+        diagram_svg = await render_mermaid_to_svg(mermaid, fallback_label=topic)
+        if not diagram_svg:
+            logger.warning("Turn diagram empty turn=%s topic=%s", turn_id, topic)
+            diagram_svg = DIAGRAM_UNAVAILABLE_SVG
+        return clarification, diagram_svg
+
     async with AsyncSessionLocal() as bg_db:
         turn = (await bg_db.execute(select(Turn).where(Turn.id == turn_id))).scalar_one_or_none()
         if turn is None:
@@ -133,14 +146,7 @@ async def _generate_turn_clarification(
         turn.clarification_status = "generating"
         await bg_db.flush()
         try:
-            clarification, mermaid = await asyncio.gather(
-                generate_clarification(topic, question, prior_answer),
-                generate_turn_diagram(topic, question),
-            )
-            diagram_svg = await render_mermaid_to_svg(mermaid, fallback_label=topic)
-            if not diagram_svg:
-                logger.warning("Turn diagram empty turn=%s topic=%s", turn_id, topic)
-                diagram_svg = DIAGRAM_UNAVAILABLE_SVG
+            clarification, diagram_svg = await _generate_assets()
             turn.clarification = clarification
             turn.diagram_svg = diagram_svg
             turn.clarification_status = "ready"
@@ -153,6 +159,64 @@ async def _generate_turn_clarification(
             turn.diagram_svg = DIAGRAM_UNAVAILABLE_SVG
             turn.clarification_status = "failed"
         await bg_db.commit()
+
+
+async def _backfill_turn_clarifications(
+    db: AsyncSession,
+    *,
+    session_uuid: uuid.UUID,
+    topic: str,
+    turns: list[Turn],
+) -> list[Turn]:
+    pending_turns = [
+        t
+        for t in turns
+        if (
+            t.clarification_status != "ready"
+            or not (t.clarification or "").strip()
+            or not (t.diagram_svg or "").strip()
+        )
+    ]
+    if not pending_turns:
+        return turns
+
+    for turn in pending_turns:
+        turn.clarification_status = "generating"
+    await db.flush()
+
+    for turn in pending_turns:
+        try:
+            clarification, mermaid = await asyncio.gather(
+                generate_clarification(topic, turn.question_generated or "", turn.student_input or ""),
+                generate_turn_diagram(topic, turn.question_generated or ""),
+            )
+            diagram_svg = await render_mermaid_to_svg(mermaid, fallback_label=topic)
+            if not diagram_svg:
+                logger.warning("Turn diagram empty turn=%s topic=%s", turn.id, topic)
+                diagram_svg = DIAGRAM_UNAVAILABLE_SVG
+            turn.clarification = clarification
+            turn.diagram_svg = diagram_svg
+            turn.clarification_status = "ready"
+        except Exception as exc:
+            logger.exception("Turn clarification backfill failed turn=%s topic=%s error=%s", turn.id, topic, exc)
+            if not (turn.clarification or "").strip():
+                turn.clarification = (
+                    "Correct answer unavailable for this turn due to a generation error. "
+                    "Review the tutor prompt and your response together."
+                )
+            if not (turn.diagram_svg or "").strip():
+                turn.diagram_svg = DIAGRAM_UNAVAILABLE_SVG
+            turn.clarification_status = "failed"
+
+    await db.flush()
+    refreshed_turns = list(
+        (
+            await db.execute(
+                select(Turn).where(Turn.session_id == session_uuid).order_by(Turn.created_at.asc())
+            )
+        ).scalars().all()
+    )
+    return refreshed_turns
 
 
 async def _sync_teaching_row(
@@ -315,6 +379,9 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
 
     classifier = UnderstandingClassifier(db, redis)
     cr = await classifier.classify(concept_uuid, concept_row.name, student_answer, session_uuid)
+    gap = cr.gap
+    if cr.state in ("partial", "wrong") and not (gap or "").strip():
+        gap = f"the student has not fully explained the core mechanism of {concept_row.name}"
     CLASSIFIER_STATE.labels(state=cr.state).inc()
     stuck = await _compute_stuck_streak(db, session_uuid, cr.state)
     mode = _resolve_mode(cr.state, stuck, concept_uuid, settings)
@@ -429,7 +496,7 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
             session_uuid,
             concept_uuid,
             cr.state,
-            cr.gap,
+            gap,
             mode,
             memory,
             opening,
@@ -437,6 +504,7 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
             session_mode=session_mode,
         )
         question_text, _ = await collect_stream(stream)
+        question_text = sanitize_tutor_output(question_text)
         passes, gtokens = await guard.check_passes(question_text, concept_row.name, session_uuid)
         tokens += gtokens
         repetitive = is_near_duplicate_question(question_text, prior_q_texts, thr)
@@ -469,6 +537,33 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
         question_text = (
             f"Let's try one more concrete angle first: what is one practical use of {concept_row.name}?"
         )
+
+    recent_ai_messages = [
+        (m.content.strip() if isinstance(m.content, str) else str(m.content).strip())
+        for m in msgs
+        if isinstance(m, AIMessage) and (m.content or "")
+    ][-3:]
+    similar_recent = any(
+        difflib.SequenceMatcher(None, question_text.strip(), prev).ratio() > 0.85
+        for prev in recent_ai_messages
+    )
+    if similar_recent:
+        regen_stream = generator.generate_stream(
+            session_uuid,
+            concept_uuid,
+            cr.state,
+            gap,
+            mode,
+            memory,
+            opening,
+            student_answer,
+            session_mode=session_mode,
+            variation_hint="Ask from a completely different angle than previous questions.",
+        )
+        regenerated_question, _ = await collect_stream(regen_stream)
+        regenerated_question = sanitize_tutor_output(regenerated_question)
+        if regenerated_question.strip():
+            question_text = regenerated_question
 
     if used_template_fallback:
         logger.info(
@@ -757,6 +852,12 @@ async def report_work(state: TeachingState, config: RunnableConfig) -> dict[str,
         ).scalars().all()
     )
     concept_row = (await db.execute(select(Concept).where(Concept.id == uuid.UUID(state["concept_id"])))).scalar_one()
+    turns = await _backfill_turn_clarifications(
+        db,
+        session_uuid=session_uuid,
+        topic=concept_row.name,
+        turns=turns,
+    )
     assets = state.get("reveal_assets") or {}
     rating = state.get("self_rating")
     conf = float(state.get("last_classifier_confidence") or 0.0)

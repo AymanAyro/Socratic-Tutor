@@ -25,6 +25,6 @@ docker compose -f docker-compose.dev.yml up -d
 Write-Host ""
 Write-Host "Dev infra is up (Postgres, Redis, Chroma, Prometheus, Grafana)."
 Write-Host "If :8000 already responds but your uvicorn terminal shows no request logs, run: .\scripts\stop-socratic-uvicorn.ps1 (orphan API from a closed Cursor/agent session)."
-Write-Host "Next: cd SRC; uv sync --extra dev; uv run alembic upgrade head; uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000"
+Write-Host "Next: cd SRC; uv sync --extra dev; uv run playwright install chromium; uv run alembic upgrade head; uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000"
 Write-Host "Verify data plane: .\scripts\verify-stack.ps1 -BaseUrl http://127.0.0.1:8000 (after API is running)"
 Write-Host "Ollama models: ollama pull phi3:mini; ollama pull qwen2.5:7b; ollama pull nomic-embed-text"
