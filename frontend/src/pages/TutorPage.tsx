@@ -1,6 +1,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   endSession,
   fetchReportStatus,
@@ -18,6 +19,8 @@ import ChatBubble from "../components/chat/ChatBubble";
 import InsightPanel from "../components/chat/InsightPanel";
 import InputBar from "../components/chat/InputBar";
 import PhaseBadge from "../components/chat/PhaseBadge";
+import RevealPanel from "../components/chat/RevealPanel";
+import SessionPhaseBar from "../components/chat/SessionPhaseBar";
 import TutorMessage from "../components/chat/TutorMessage";
 import TypingIndicator from "../components/chat/TypingIndicator";
 import SessionHistory from "../components/session/SessionHistory";
@@ -30,44 +33,15 @@ type ExamLiveMeta = {
   target: number;
 };
 
-function stage2PhaseHint(phase: string): string {
-  switch (phase) {
-    case "PROBE":
-      return "You answer in your own words; the tutor keeps asking until you hit the minimum turns or a cap, then you get the model answer.";
-    case "REVEAL":
-      return "Reference answer (and diagram when available). Next: rate how well you understood.";
-    case "REFLECT":
-      return "Pick 1–5 to unlock one short question that checks you understood the explanation.";
-    case "CONSOLIDATE":
-      return "Answer the consolidation question; the arc finishes when your understanding checks out.";
-    case "END":
-      return "This concept arc is complete. End the session or restart to study again.";
-    default:
-      return "";
-  }
-}
-
-function applyRevealDiagram(
-  rev: Record<string, unknown> | undefined,
-  setRevealHtml: (s: string | null) => void,
-  setDiagramNote: (s: string | null) => void
-) {
-  const svg = rev?.concept_diagram_svg;
-  const failed = Boolean(rev?.diagram_failed);
-  if (typeof svg === "string" && svg.trim()) {
-    setRevealHtml(svg);
-    setDiagramNote(null);
-    return;
-  }
-  setRevealHtml(null);
-  setDiagramNote(
-    failed
-      ? "No diagram could be generated for this concept. You still have the full text explanation."
-      : "No diagram is available for this concept; rely on the written explanation."
-  );
-}
+const DISPLAY_LABELS: Record<string, string> = {
+  correct: "Got it",
+  partial: "Getting there",
+  wrong: "Incorrect",
+  stuck: "Still working on it",
+};
 
 export default function TutorPage() {
+  const navigate = useNavigate();
   const {
     conceptId,
     sessionId,
@@ -92,8 +66,12 @@ export default function TutorPage() {
   const [useStage2, setUseStage2] = useState(true);
   const [stage2Active, setStage2Active] = useState(false);
   const [teachingPhase, setTeachingPhase] = useState<string | null>(null);
-  const [revealHtml, setRevealHtml] = useState<string | null>(null);
-  const [diagramNote, setDiagramNote] = useState<string | null>(null);
+  const [phaseMeta, setPhaseMeta] = useState<{ probe_turns: number; max_probe_turns: number } | null>(null);
+  const [revealContent, setRevealContent] = useState<{
+    idealAnswer: string;
+    diagramSvg: string | null;
+    conceptId: string | null;
+  } | null>(null);
   const [reportReadyUrl, setReportReadyUrl] = useState<string | null>(null);
   const [activeTurnId, setActiveTurnId] = useState<string | null>(null);
   const [insightPanelOpen, setInsightPanelOpen] = useState(false);
@@ -133,8 +111,8 @@ export default function TutorPage() {
       setLastClassState(null);
       setStage2Active(!!data.use_stage2);
       setTeachingPhase(data.teaching_phase ?? (data.use_stage2 ? "PROBE" : null));
-      setRevealHtml(null);
-      setDiagramNote(null);
+      setRevealContent(null);
+      setPhaseMeta(null);
       setReportReadyUrl(null);
       appendMessage({ role: "tutor", text: data.opening_question });
     },
@@ -144,6 +122,10 @@ export default function TutorPage() {
     mutationFn: async (sid: string) => endSession(sid),
     onSuccess: async (data, sid) => {
       if (data.exam) setExamFinal(data.exam);
+      if (stage2Active) {
+        navigate(`/report/${sid}`);
+        return;
+      }
       try {
         const st = await fetchReportStatus(sid);
         if (st.status === "ready") setReportReadyUrl(reportPdfUrl(sid));
@@ -195,7 +177,11 @@ export default function TutorPage() {
         },
         onRevealDone: (payload) => {
           const rev = payload.reveal as Record<string, unknown> | undefined;
-          applyRevealDiagram(rev, setRevealHtml, setDiagramNote);
+          setRevealContent({
+            idealAnswer: String(rev?.ideal_answer ?? ""),
+            diagramSvg: typeof rev?.concept_diagram_svg === "string" ? rev.concept_diagram_svg : null,
+            conceptId: typeof rev?.concept_id === "string" ? rev.concept_id : null,
+          });
           if (typeof payload.phase === "string") setTeachingPhase(payload.phase as string);
         },
       });
@@ -203,8 +189,17 @@ export default function TutorPage() {
         try {
           const ph = await fetchSessionPhase(sessionId);
           setTeachingPhase(ph.phase);
-          if (ph.last_reveal) {
-            applyRevealDiagram(ph.last_reveal as Record<string, unknown>, setRevealHtml, setDiagramNote);
+          setPhaseMeta({ probe_turns: ph.probe_turns, max_probe_turns: ph.max_probe_turns });
+          if (ph.last_reveal?.ideal_answer) {
+            setRevealContent({
+              idealAnswer: String(ph.last_reveal.ideal_answer ?? ""),
+              diagramSvg:
+                typeof ph.last_reveal.concept_diagram_svg === "string"
+                  ? ph.last_reveal.concept_diagram_svg
+                  : null,
+              conceptId:
+                typeof ph.last_reveal.concept_id === "string" ? ph.last_reveal.concept_id : null,
+            });
           }
         } catch {
           /* ignore */
@@ -229,6 +224,24 @@ export default function TutorPage() {
     if (!text.trim()) return undefined;
     return turnsQ.data?.find((t) => t.question.trim() === text.trim());
   };
+
+  useEffect(() => {
+    if (!stage2Active || !sessionId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const ph = await fetchSessionPhase(sessionId);
+        if (cancelled) return;
+        setTeachingPhase(ph.phase);
+        setPhaseMeta({ probe_turns: ph.probe_turns, max_probe_turns: ph.max_probe_turns });
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [stage2Active, sessionId]);
 
   return (
     <div className="space-y-6">
@@ -305,33 +318,33 @@ export default function TutorPage() {
       </div>
 
       {stage2Active && sessionId && teachingPhase && (
-        <div className="text-xs text-muted">
-          <p>
-            Phase: <span className="font-semibold text-text">{teachingPhase}</span>
-          </p>
-          {(() => {
-            const hint = stage2PhaseHint(teachingPhase);
-            return hint ? (
-              <p className="mt-1 text-muted leading-snug max-w-2xl">{hint}</p>
-            ) : null;
-          })()}
+        <div className="space-y-2">
+          <SessionPhaseBar
+            phase={teachingPhase}
+            probeTurns={phaseMeta?.probe_turns}
+            maxProbeTurns={phaseMeta?.max_probe_turns}
+          />
           {teachingPhase === "PROBE" && (
             <button
               type="button"
-              className="ml-3 underline text-accent hover:text-accent/80"
+              className="underline text-accent hover:text-accent/80 text-xs"
               onClick={async () => {
                 if (!sessionId) return;
                 try {
                   const ph = await revealEarly(sessionId);
                   setTeachingPhase(ph.phase);
                   if (ph.last_reveal?.ideal_answer) {
-                    appendMessage({
-                      role: "tutor",
-                      text: String(ph.last_reveal.ideal_answer ?? ""),
+                    setRevealContent({
+                      idealAnswer: String(ph.last_reveal.ideal_answer ?? ""),
+                      diagramSvg:
+                        typeof ph.last_reveal.concept_diagram_svg === "string"
+                          ? ph.last_reveal.concept_diagram_svg
+                          : null,
+                      conceptId:
+                        typeof ph.last_reveal.concept_id === "string"
+                          ? ph.last_reveal.concept_id
+                          : null,
                     });
-                  }
-                  if (ph.last_reveal) {
-                    applyRevealDiagram(ph.last_reveal as Record<string, unknown>, setRevealHtml, setDiagramNote);
                   }
                 } catch (e) {
                   appendMessage({
@@ -367,7 +380,7 @@ export default function TutorPage() {
             disabled={endMut.isPending}
             onClick={() => sessionId && endMut.mutate(sessionId)}
           >
-            End &amp; report
+            Finish Session
           </motion.button>
         )}
         {sessionId && activeMode === "exam_prep" && (
@@ -510,14 +523,14 @@ export default function TutorPage() {
         </a>
       )}
 
-      {revealHtml && (
-        <div
-          className="rounded-xl border border-border bg-surface p-3 overflow-x-auto max-h-64 text-sm [&_svg]:max-h-52"
-          dangerouslySetInnerHTML={{ __html: revealHtml }}
+      {revealContent && sessionId && (
+        <RevealPanel
+          sessionId={sessionId}
+          conceptId={revealContent.conceptId}
+          idealAnswer={revealContent.idealAnswer}
+          diagramSvg={revealContent.diagramSvg}
+          onGotIt={() => setTeachingPhase("REFLECT")}
         />
-      )}
-      {diagramNote && !revealHtml && (
-        <p className="rounded-xl border border-border bg-surface px-3 py-2 text-sm text-muted">{diagramNote}</p>
       )}
 
       {stage2Active && sessionId && teachingPhase === "REFLECT" && (
@@ -594,7 +607,7 @@ export default function TutorPage() {
               <span
                 className={`inline-flex items-center rounded-lg border px-2 py-0.5 text-xs font-medium ${badgeForState(lastClassState)}`}
               >
-                Understanding: {lastClassState}
+                Understanding: {DISPLAY_LABELS[lastClassState] ?? lastClassState}
               </span>
             </div>
           )}

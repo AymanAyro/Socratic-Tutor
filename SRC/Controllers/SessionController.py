@@ -178,6 +178,7 @@ class SessionController:
                 "session_stats": {"classifier_sequence": [], "escape_hatch_count": 0},
                 "consolidate_attempts": 0,
                 "needs_report": False,
+                "end_requested": False,
             }
             schedule_stage2_reveal_background(
                 str(session.id),
@@ -535,10 +536,8 @@ class SessionController:
             }
         }
         try:
-            await teaching_graph.ainvoke(
-                Command(update={"needs_report": True}, goto="report_work"),
-                cfg,
-            )
+            await teaching_graph.aupdate_state(cfg, {"end_requested": True, "needs_report": True})
+            await teaching_graph.ainvoke(None, cfg)
         except Exception:
             logger.exception("Stage 2 report finalization failed session=%s", session_id)
 

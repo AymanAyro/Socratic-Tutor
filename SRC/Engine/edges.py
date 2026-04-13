@@ -6,6 +6,8 @@ from Engine.state import TeachingState
 
 
 def route_ingress(state: TeachingState) -> str:
+    if state.get("end_requested"):
+        return "report_work"
     phase = state.get("phase", "PROBE")
     if phase == "CONSOLIDATE":
         return "consolidate_turn"
@@ -22,12 +24,14 @@ def route_ingress(state: TeachingState) -> str:
 
 
 def route_after_probe(state: TeachingState) -> str:
+    if state.get("end_requested") or state.get("needs_report"):
+        return "report_work"
     if state.get("phase") == "REVEAL":
         return "reveal_work"
     return END
 
 
 def route_after_consolidate(state: TeachingState) -> str:
-    if state.get("needs_report"):
+    if state.get("end_requested") or state.get("needs_report"):
         return "report_work"
     return END

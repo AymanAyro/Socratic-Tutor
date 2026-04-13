@@ -3,6 +3,7 @@ import { Link, Route, Routes, NavLink, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import ContentPage from "./pages/ContentPage";
 import DashboardPage from "./pages/DashboardPage";
+import ReportPage from "./pages/ReportPage";
 import TutorPage from "./pages/TutorPage";
 
 const tabs = [
@@ -104,6 +105,7 @@ export default function App() {
             <Route path="/" element={<TutorPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/content" element={<ContentPage />} />
+            <Route path="/report/:sessionId" element={<ReportPage />} />
           </Routes>
         </motion.div>
       </main>

@@ -6,13 +6,21 @@ const PHASE_STYLES: Record<string, string> = {
   END: "bg-gray-500/10 text-gray-400 border-gray-500/30",
 };
 
+const PHASE_LABELS: Record<string, string> = {
+  PROBE: "Exploration",
+  REVEAL: "Reveal",
+  REFLECT: "Reflect",
+  CONSOLIDATE: "Check",
+  END: "Done",
+};
+
 export default function PhaseBadge({ phase }: { phase: string }) {
   const style = PHASE_STYLES[phase] ?? PHASE_STYLES.END;
   return (
     <span
       className={`text-xs px-2.5 py-0.5 rounded-full border font-medium uppercase tracking-wider ${style}`}
     >
-      {phase}
+      {PHASE_LABELS[phase] ?? "Done"}
     </span>
   );
 }

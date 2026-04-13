@@ -221,3 +221,36 @@ export async function fetchReportStatus(sessionId: string): Promise<{
 export function reportPdfUrl(sessionId: string): string {
   return apiUrl(`/report/${sessionId}/pdf`);
 }
+
+export async function fetchSessionDiagram(sessionId: string, conceptId: string): Promise<string> {
+  const r = await fetch(apiUrl(`/session/${sessionId}/diagram/${conceptId}`));
+  if (!r.ok) throw new Error(await r.text());
+  return r.text();
+}
+
+export type ReportSummary = {
+  session_id: string;
+  status: string;
+  analyst: {
+    overall_performance?: string;
+    strongest_concept?: string;
+    weakest_concept?: string;
+    insight?: string;
+    recommendations?: string[];
+    dunning_kruger_flag?: boolean;
+    concepts_to_review?: string[];
+  };
+  review_schedule: Array<{
+    concept_name: string;
+    days_until: number;
+    review_date: string;
+    mastery_score: number;
+  }>;
+  session_name: string | null;
+};
+
+export async function fetchReportSummary(sessionId: string): Promise<ReportSummary> {
+  const r = await fetch(apiUrl(`/report/${sessionId}/summary`));
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}

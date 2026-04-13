@@ -23,7 +23,7 @@ from Engine.agents.PerformanceAnalyst import analyse_session_performance
 from Engine.agents.TurnClarificationAgent import generate_clarification, generate_turn_diagram
 from Engine.state import TeachingState
 from Models.Content import Concept
-from Models.Session import Turn, TutorSession
+from Models.Session import MasteryScore, Turn, TutorSession
 from Pipelines.MermaidRenderer import render_mermaid_to_svg
 from Stats.MasteryTracker import MasteryTracker
 from Stats.Metrics import (
@@ -185,12 +185,11 @@ async def _background_assets_job(
             mermaid = await generate_concept_diagram_mermaid(db, concept_id)
         svg = ""
         diagram_failed = False
-        try:
-            svg = await render_mermaid_to_svg(mermaid)
-        except Exception:
+        svg = await render_mermaid_to_svg(mermaid)
+        if not svg:
             diagram_failed = True
             if not settings.mermaid_fallback_on_error:
-                raise
+                raise RuntimeError("Diagram render unavailable")
         slot.update(
             {
                 "status": "ready",
@@ -230,12 +229,11 @@ async def _generate_reveal_assets_inline(
         mermaid = await generate_concept_diagram_mermaid(db, concept_id)
     svg = ""
     diagram_failed = False
-    try:
-        svg = await render_mermaid_to_svg(mermaid)
-    except Exception:
+    svg = await render_mermaid_to_svg(mermaid)
+    if not svg:
         diagram_failed = True
         if not settings.mermaid_fallback_on_error:
-            raise
+            raise RuntimeError("Diagram render unavailable")
     return ideal, svg or "", diagram_failed
 
 
@@ -504,6 +502,7 @@ async def reveal_work(state: TeachingState, config: RunnableConfig) -> dict[str,
     }
     payload = {
         "type": "reveal",
+        "concept_id": state.get("concept_id"),
         "ideal_answer": ideal,
         "concept_diagram_svg": svg,
         "diagram_failed": diagram_failed,
@@ -555,6 +554,7 @@ async def reflect_consolidate(state: TeachingState, config: RunnableConfig) -> d
         "consolidation_question": q,
         "consolidate_attempts": 0,
         "needs_report": False,
+        "end_requested": False,
     }
 
 
@@ -608,6 +608,7 @@ async def consolidate_turn(state: TeachingState, config: RunnableConfig) -> dict
             "needs_report": True,
             "phase": "END",
             "consolidate_attempts": attempts,
+            "end_requested": False,
         }
 
     if attempts >= 1:
@@ -619,6 +620,7 @@ async def consolidate_turn(state: TeachingState, config: RunnableConfig) -> dict
             "needs_report": True,
             "phase": "END",
             "consolidate_attempts": attempts + 1,
+            "end_requested": False,
         }
 
     rating = int(state.get("self_rating") or 3)
@@ -639,6 +641,7 @@ async def consolidate_turn(state: TeachingState, config: RunnableConfig) -> dict
         "consolidation_question": q,
         "phase": "CONSOLIDATE",
         "needs_report": False,
+        "end_requested": False,
     }
 
 
@@ -675,6 +678,28 @@ async def report_work(state: TeachingState, config: RunnableConfig) -> dict[str,
     analyst = await analyse_session_performance(db, session_id=session_uuid, payload=payload)
     from Pipelines.ReportComposer import ReportComposer
 
+    user_id = getattr(session_row, "user_id", None)
+    review_schedule: list[dict[str, Any]] = []
+    if user_id is not None:
+        mastery = (
+            await db.execute(
+                select(MasteryScore)
+                .where(MasteryScore.user_id == user_id, MasteryScore.concept_id == concept_row.id)
+                .order_by(MasteryScore.next_review_date.asc().nullslast())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if mastery is not None and mastery.next_review_date is not None:
+            days_until = max(0, (mastery.next_review_date - datetime.now(timezone.utc).date()).days)
+            review_schedule.append(
+                {
+                    "concept_name": concept_row.name,
+                    "days_until": days_until,
+                    "review_date": mastery.next_review_date.isoformat(),
+                    "mastery_score": float(mastery.score or 0.0),
+                }
+            )
+
     composer = ReportComposer()
     snapshot = dict(state)
     snapshot["session_name"] = session_row.name or state.get("concept_name") or ""
@@ -686,6 +711,7 @@ async def report_work(state: TeachingState, config: RunnableConfig) -> dict[str,
         turns=turns,
         diagram_svg=str(assets.get("diagram_svg") or ""),
         ideal_answer=str(assets.get("ideal_answer") or ""),
+        review_schedule=review_schedule,
     )
     await _sync_teaching_row(
         db,
@@ -702,4 +728,5 @@ async def report_work(state: TeachingState, config: RunnableConfig) -> dict[str,
         "analyst_json": analyst,
         "phase": "END",
         "needs_report": False,
+        "end_requested": False,
     }

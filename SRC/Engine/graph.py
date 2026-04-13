@@ -28,6 +28,7 @@ def build_teaching_graph(checkpointer: BaseCheckpointSaver):
         {
             "probe_turn": "probe_turn",
             "consolidate_turn": "consolidate_turn",
+            "report_work": "report_work",
             END: END,
         },
     )
@@ -36,6 +37,7 @@ def build_teaching_graph(checkpointer: BaseCheckpointSaver):
         route_after_probe,
         {
             "reveal_work": "reveal_work",
+            "report_work": "report_work",
             END: END,
         },
     )

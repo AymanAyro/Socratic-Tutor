@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Session Report - Fine-tuning</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="report-header">
+  <div class="brand">Socratic Tutor</div>
+  <div class="meta">
+    <h1>Session Report</h1>
+    <p class="subtitle">Model Fine Tuning Essentials · Apr 13 - Apr 13, 2026</p>
+    <p class="session-id">Session 0a48ff27</p>
+  </div>
+</header>
+
+<section class="section">
+  <h2>Performance Overview</h2>
+  <div class="metric-grid">
+    <div class="metric-card">
+      <span class="metric-value">8</span>
+      <span class="metric-label">Exploration turns</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-value">5 / 5</span>
+      <span class="metric-label">Your self-rating</span>
+    </div>
+    <div class="metric-card">
+      <span class="metric-value">70%</span>
+      <span class="metric-label">Assessed confidence</span>
+    </div>
+    <div class="metric-card metric-card--highlight">
+      <span class="metric-value">struggling</span>
+      <span class="metric-label">Overall</span>
+    </div>
+  </div>
+  
+  <div class="alert alert--yellow">
+    Your self-rating was notably higher than your responses indicated. See the AI insight below.
+  </div>
+  
+</section>
+
+<section class="section">
+  <h2>Understanding Journey</h2>
+  <div class="turn-timeline">
+    
+    <a href="#turn-1" class="timeline-dot timeline-dot--correct">
+      <span class="dot-number">1</span>
+      <span class="dot-label">Got it</span>
+    </a>
+    
+    <a href="#turn-2" class="timeline-dot timeline-dot--stuck">
+      <span class="dot-number">2</span>
+      <span class="dot-label">Still working on it</span>
+    </a>
+    
+    <a href="#turn-3" class="timeline-dot timeline-dot--stuck">
+      <span class="dot-number">3</span>
+      <span class="dot-label">Still working on it</span>
+    </a>
+    
+    <a href="#turn-4" class="timeline-dot timeline-dot--partial">
+      <span class="dot-number">4</span>
+      <span class="dot-label">Getting there</span>
+    </a>
+    
+    <a href="#turn-5" class="timeline-dot timeline-dot--stuck">
+      <span class="dot-number">5</span>
+      <span class="dot-label">Still working on it</span>
+    </a>
+    
+    <a href="#turn-6" class="timeline-dot timeline-dot--stuck">
+      <span class="dot-number">6</span>
+      <span class="dot-label">Still working on it</span>
+    </a>
+    
+    <a href="#turn-7" class="timeline-dot timeline-dot--stuck">
+      <span class="dot-number">7</span>
+      <span class="dot-label">Still working on it</span>
+    </a>
+    
+    <a href="#turn-8" class="timeline-dot timeline-dot--partial">
+      <span class="dot-number">8</span>
+      <span class="dot-label">Getting there</span>
+    </a>
+    
+    <a href="#turn-9" class="timeline-dot timeline-dot--partial">
+      <span class="dot-number">9</span>
+      <span class="dot-label">Getting there</span>
+    </a>
+    
+  </div>
+</section>
+
+<section class="section section--reveal">
+  <h2>Concept Explanation</h2>
+  <div class="reveal-grid">
+    <div class="reveal-answer">
+      <h3>Model Answer</h3>
+      <p>Fine-tuning is the process of adapting a pre-trained foundation model to a specific downstream task or domain by further training it on a smaller, targeted dataset.
+
+Rather than training a model from scratch—which requires massive computational resources and vast amounts of data—fine-tuning leverages the general knowledge, patterns, and linguistic structures the model acquired during its initial pre-training phase. By updating the model&#39;s weights using a specialized dataset, the model learns to optimize its output for a particular objective, such as medical diagnosis, legal analysis, or a specific corporate tone. This allows the model to narrow its focus and significantly improve accuracy and relevance for niche applications. Depending on the implementation, this can involve updating all model parameters (full fine-tuning) or utilizing parameter-efficient fine-tuning (PEFT) techniques, which update only a small subset of weights to reduce computational overhead while maintaining high performance.</p>
+    </div>
+    
+  </div>
+</section>
+
+<section class="section">
+  <h2>Dialogue Breakdown</h2>
+  
+  <div id="turn-1" class="turn-card turn-card--correct">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 1</span>
+      <span class="turn-badge turn-badge--correct">
+        Got it
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>Fine tuning works on adapting a foundation model to new specific data in order to fit a required task.</p>
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">If a general-purposemodel is fine-tuned extensively on a very narrow dataset, such as legal documents, what might happen to its ability toperform unrelated tasks it previously mastered?</p>
+    </div>
+    
+  </div>
+  
+  <div id="turn-2" class="turn-card turn-card--stuck">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 2</span>
+      <span class="turn-badge turn-badge--stuck">
+        Still working on it
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>It&#39;d struggle on doing so.</p>
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">What is actually being modified within the model when itis being fine-tuned?</p>
+    </div>
+    
+  </div>
+  
+  <div id="turn-3" class="turn-card turn-card--stuck">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 3</span>
+      <span class="turn-badge turn-badge--stuck">
+        Still working on it
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>Its parameters</p>
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">Do allof the model&#39;s parameters have to change during fine-tuning, or can some be kept the same?</p>
+    </div>
+    
+  </div>
+  
+  <div id="turn-4" class="turn-card turn-card--partial">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 4</span>
+      <span class="turn-badge turn-badge--partial">
+        Getting there
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>No only the high level parameters that control the tokens prediction of the model according to the data.</p>
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">When themodel&#39;s prediction differs from the target data during fine-tuning, what process is used to determine exactly how those parametersshould be adjusted?</p>
+    </div>
+    
+  </div>
+  
+  <div id="turn-5" class="turn-card turn-card--stuck">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 5</span>
+      <span class="turn-badge turn-badge--stuck">
+        Still working on it
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>I don&#39;t know</p>
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">Before we can adjust parameters, how do we measure the differencebetween what the model predicted and what the actual answer was?</p>
+    </div>
+    
+  </div>
+  
+  <div id="turn-6" class="turn-card turn-card--stuck">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 6</span>
+      <span class="turn-badge turn-badge--stuck">
+        Still working on it
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>Tell me</p>
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">If a model predicts a value of 7 but the correct answer is 10, how wouldyou mathematically describe the gap between those two numbers?</p>
+    </div>
+    
+  </div>
+  
+  <div id="turn-7" class="turn-card turn-card--stuck">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 7</span>
+      <span class="turn-badge turn-badge--stuck">
+        Still working on it
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>Using loss functions.</p>
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">A loss function quantifies the error between a prediction and the target value. This single number tells the model how faroff it is, but not yet how to fix the mistake.
+
+How does the model communicate this error backward through itslayers to determine which specific weights need to change?</p>
+    </div>
+    
+  </div>
+  
+  <div id="turn-8" class="turn-card turn-card--partial">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 8</span>
+      <span class="turn-badge turn-badge--partial">
+        Getting there
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>Using backprobagation?</p>
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">[Reveal — Socratic phase complete.]</p>
+    </div>
+    
+  </div>
+  
+  <div id="turn-9" class="turn-card turn-card--partial">
+    <div class="turn-card-header">
+      <span class="turn-number">Turn 9</span>
+      <span class="turn-badge turn-badge--partial">
+        Getting there
+      </span>
+    </div>
+    <div class="turn-student">
+      <span class="turn-role">Your answer</span>
+      <p>It updates only a small subset of weights to reduce computational resources usage.</p>
+    </div>
+    <div class="turn-tutor">
+      <span class="turn-role">Tutor's next question</span>
+      <p class="turn-question">[Consolidation check.]</p>
+    </div>
+    
+  </div>
+  
+</section>
+
+<section class="section">
+  <h2>AI Insight</h2>
+  <div class="insight-callout">
+    <p>The student reports a maximum confidence level, yet the session data shows they were &#39;stuck&#39; in the majority of probe turns. This indicates the student may be overestimating their understanding of fine-tuning.</p>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Recommendations</h2>
+  <div class="reco-grid">
+    
+    <div class="reco-card">
+      <span class="reco-number">1</span>
+      <p>Revisit the core theoretical foundations of fine-tuning to bridge the gap between perceived and actual knowledge.</p>
+    </div>
+    
+    <div class="reco-card">
+      <span class="reco-number">2</span>
+      <p>Complete a set of guided practical exercises to move from &#39;stuck&#39; to &#39;partial&#39; and &#39;correct&#39; responses.</p>
+    </div>
+    
+    <div class="reco-card">
+      <span class="reco-number">3</span>
+      <p>Use a checklist of fine-tuning requirements to self-verify understanding before the next session.</p>
+    </div>
+    
+  </div>
+</section>
+
+<section class="section">
+  <h2>Next Review Schedule</h2>
+  <div class="review-schedule">
+    
+    <div class="review-item">
+      <span class="review-concept">Fine-tuning</span>
+      <span class="review-date">Review in 6 days (2026-04-19)</span>
+      <div class="mastery-bar">
+        <div class="mastery-fill" style="width: 20.0%"></div>
+      </div>
+    </div>
+    
+  </div>
+</section>
+</body>
+</html>

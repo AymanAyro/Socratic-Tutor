@@ -31,7 +31,7 @@ def fallback_diagram_svg(concept_name: str) -> str:
 """.strip()
 
 
-async def render_mermaid_to_svg(mermaid_code: str, fallback_label: str | None = None) -> str:
+async def render_mermaid_to_svg(mermaid_code: str, fallback_label: str | None = None) -> str | None:
     settings = get_settings()
     t0 = time.perf_counter()
     safe = (mermaid_code or "").replace("</script>", "<\\/script>")
@@ -47,10 +47,10 @@ async def render_mermaid_to_svg(mermaid_code: str, fallback_label: str | None = 
             finally:
                 await browser.close()
         DIAGRAM_RENDER_LATENCY.observe(time.perf_counter() - t0)
-        return svg or ""
+        return svg or None
     except Exception:
         logger.exception("Mermaid render failed")
         DIAGRAM_RENDER_LATENCY.observe(time.perf_counter() - t0)
         if fallback_label:
             return fallback_diagram_svg(fallback_label)
-        raise
+        return None

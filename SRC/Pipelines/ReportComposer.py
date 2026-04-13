@@ -31,6 +31,7 @@ class ReportComposer:
         turns: list[Turn],
         diagram_svg: str,
         ideal_answer: str,
+        review_schedule: list[dict] | None = None,
     ) -> str:
         self._output_dir.mkdir(parents=True, exist_ok=True)
         env = jinja2.Environment(
@@ -38,33 +39,44 @@ class ReportComposer:
             autoescape=jinja2.select_autoescape(["html", "xml"]),
         )
         template = env.get_template("session_report.html")
+        display_labels = {
+            "correct": "Got it",
+            "partial": "Getting there",
+            "wrong": "Incorrect",
+            "stuck": "Still working on it",
+        }
+        turn_rows = [
+            {
+                "student_input": t.student_input,
+                "question_generated": t.question_generated,
+                "classifier_state": t.classifier_state,
+                "gap": t.clarification,
+                "diagram_svg": t.diagram_svg,
+            }
+            for t in turns
+        ]
         ctx = {
             "session": {
                 "session_id": str(session_id),
-                "topic": concept_name,
+                "concept_name": concept_name,
                 "name": state_snapshot.get("session_name") or concept_name,
+                "date": datetime.now(timezone.utc).strftime("%b %d, %Y"),
+                "self_rating": state_snapshot.get("self_rating"),
             },
-            "generated_at": datetime.now(timezone.utc).strftime("%b %d, %Y"),
-            "summary": {
+            "analyst": analyst,
+            "current_concept": {
+                "name": concept_name,
+                "ideal_answer": ideal_answer,
+                "concept_diagram_svg": diagram_svg,
+            },
+            "turns": turn_rows,
+            "stats": {
                 "probe_turns": int(state_snapshot.get("probe_turns") or 0),
                 "self_rating": state_snapshot.get("self_rating"),
                 "classifier_confidence": float(state_snapshot.get("last_classifier_confidence") or 0.0),
-                "overall": analyst.get("overall_performance", "developing"),
             },
-            "analyst": analyst,
-            "turns": [
-                {
-                    "student_input": t.student_input,
-                    "question": t.question_generated,
-                    "classifier_state": t.classifier_state,
-                    "clarification": t.clarification,
-                    "diagram_svg": t.diagram_svg,
-                }
-                for t in turns
-            ],
-            "concept_diagram_svg": diagram_svg,
-            "model_answer": ideal_answer,
-            "review_schedule": [],
+            "review_schedule": review_schedule or [],
+            "DISPLAY_LABELS": display_labels,
         }
         html_str = template.render(**ctx)
         out_path = self._output_dir / f"{session_id}.pdf"

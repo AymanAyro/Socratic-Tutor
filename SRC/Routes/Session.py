@@ -1,7 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Request
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import Response, StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -92,11 +92,28 @@ async def session_diagram(
     request: Request,
     session_id: uuid.UUID,
     concept_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
 ):
-    store = getattr(request.app.state, "stage2_asset_store", {})
-    slot = store.get(str(session_id), {})
-    svg = slot.get("diagram_svg") or ""
-    return PlainTextResponse(svg or "<!-- pending -->", media_type="image/svg+xml")
+    g = getattr(request.app.state, "teaching_graph", None)
+    if g is None:
+        raise HTTPException(status_code=503, detail="Teaching graph unavailable")
+    cfg = {
+        "configurable": {
+            "thread_id": str(session_id),
+            "db": db,
+            "redis": None,
+            "asset_store": getattr(request.app.state, "stage2_asset_store", {}),
+        }
+    }
+    snap = await g.aget_state(cfg)
+    vals = snap.values or {}
+    if str(vals.get("concept_id") or "") != str(concept_id):
+        raise HTTPException(status_code=404, detail="Concept not found")
+    last_reveal = vals.get("reveal_assets") or {}
+    svg = str(last_reveal.get("diagram_svg") or "").strip()
+    if not svg:
+        raise HTTPException(status_code=404, detail="Diagram not ready")
+    return Response(content=svg, media_type="image/svg+xml")
 
 
 @router.post("/{session_id}/reveal", response_model=SessionPhaseOut)

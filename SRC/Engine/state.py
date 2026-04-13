@@ -55,3 +55,4 @@ class TeachingState(TypedDict, total=False):
     report_status: str | None
     analyst_json: dict[str, Any] | None
     force_reveal: bool
+    end_requested: bool

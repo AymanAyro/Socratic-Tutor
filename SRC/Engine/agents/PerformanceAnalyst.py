@@ -32,6 +32,10 @@ Output a JSON object with exactly these fields:
   "concepts_to_review": ["concept ids due before next session"]
 }}
 
+If the student's self-rating is 2 or more points higher than classifier confidence suggests,
+set dunning_kruger_flag to true and include in insight that the student may be
+overestimating understanding. Keep this constructive and actionable.
+
 Output only the JSON object."""
 
 
