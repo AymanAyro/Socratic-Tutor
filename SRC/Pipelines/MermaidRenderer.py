@@ -48,7 +48,7 @@ async def render_mermaid_to_svg(mermaid_code: str, fallback_label: str | None = 
                     page = browser.new_page()
                     page.set_content(html, timeout=timeout_ms)
                     page.wait_for_selector("svg", timeout=timeout_ms)
-                    svg = page.inner_html("svg")
+                    svg = page.eval_on_selector("svg", "el => el.outerHTML")
                 finally:
                     browser.close()
             return svg or None

@@ -52,7 +52,9 @@ class ReportComposer:
                 "student_input": t.student_input,
                 "question_generated": t.question_generated,
                 "classifier_state": t.classifier_state,
-                "correct_answer": t.clarification,
+                "correct_answer": (
+                    getattr(t, "correct_answer", None) or getattr(t, "clarification", None)
+                ),
                 "diagram_svg": t.diagram_svg,
             }
             for t in turns

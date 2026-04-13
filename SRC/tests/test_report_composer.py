@@ -11,6 +11,7 @@ class _Turn:
         self.student_input = "My answer"
         self.question_generated = "Next question?"
         self.classifier_state = "partial"
+        self.correct_answer = "Expected model answer"
         self.clarification = "Missed causal link"
         self.diagram_svg = None
 

@@ -61,14 +61,16 @@
       <h3>Model Answer</h3>
       <p>{{ current_concept.ideal_answer }}</p>
     </div>
-    {% if current_concept.concept_diagram_svg %}
     <div class="reveal-diagram">
       <h3>Concept Diagram</h3>
       <div class="diagram-container">
+        {% if current_concept.concept_diagram_svg %}
         {{ current_concept.concept_diagram_svg | safe }}
+        {% else %}
+        <div class="diagram-fallback">Diagram unavailable</div>
+        {% endif %}
       </div>
     </div>
-    {% endif %}
   </div>
 </section>
 

@@ -21,6 +21,7 @@ class _Turn:
         self.student_input = student_input
         self.question_generated = question_generated
         self.classifier_state = "partial"
+        self.correct_answer = None
         self.clarification = clarification
         self.diagram_svg = diagram_svg
         self.clarification_status = clarification_status
@@ -57,6 +58,7 @@ async def test_report_work_backfills_missing_turn_assets():
         diagram_svg="<svg><g>Turn diagram</g></svg>",
         clarification_status="ready",
     )
+    updated_pending_turn.correct_answer = "Expected model answer"
 
     fetch_turn_batches = [[pending_turn, ready_turn], [updated_pending_turn, ready_turn]]
     execute_calls = 0
@@ -106,6 +108,7 @@ async def test_report_work_backfills_missing_turn_assets():
         )
 
     compose_turns = compose_mock.await_args.kwargs["turns"]
+    assert compose_turns[0].correct_answer == "Expected model answer"
     assert compose_turns[0].clarification == "Backfilled explanation"
     assert compose_turns[0].diagram_svg == "<svg><g>Turn diagram</g></svg>"
     assert compose_turns[0].clarification_status == "ready"

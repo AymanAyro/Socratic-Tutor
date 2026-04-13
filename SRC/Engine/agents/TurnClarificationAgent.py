@@ -34,6 +34,18 @@ Rules:
 - Output only the raw Mermaid code. Nothing else.
 """
 
+CORRECT_ANSWER_SYSTEM = """
+You are an educational content writer.
+
+Given a topic, a Socratic question, and supporting source context, write a concise
+model answer (1-3 sentences) that a student with solid understanding would give.
+
+Rules:
+- Ground the answer in the provided context
+- Be direct and specific
+- Output only the model answer, with no headings or preamble
+"""
+
 
 def _strip_code_fence(raw: str) -> str:
     text = (raw or "").strip()
@@ -70,6 +82,26 @@ async def generate_clarification(topic: str, question: str, prior_answer: str) -
         model=settings.generation_model_id,
     )
     return _safe_clarification(text)
+
+
+async def generate_correct_answer(topic: str, question: str, rag_context: str) -> str:
+    settings = get_settings()
+    prompt = (
+        f"Topic: {topic[:300]}\n"
+        f"Socratic question: {question[:1200]}\n"
+        f"Source context: {rag_context[:4000]}\n\n"
+        "Write the model answer now."
+    )
+    gen = get_generation_client()
+    text, _ = await gen.generate(
+        prompt=prompt,
+        system=CORRECT_ANSWER_SYSTEM,
+        model=settings.generation_model_id,
+    )
+    cleaned = re.sub(r"\s+", " ", (text or "").strip())
+    if not cleaned:
+        return "A model answer could not be generated for this turn."
+    return cleaned[:1200]
 
 
 async def generate_turn_diagram(topic: str, question: str) -> str:

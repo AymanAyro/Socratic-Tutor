@@ -20,7 +20,11 @@ from Engine.agents.ConsolidationGen import generate_consolidation_question
 from Engine.agents.DiagramAgent import generate_concept_diagram_mermaid
 from Engine.agents.IdealAnswer import generate_ideal_answer
 from Engine.agents.PerformanceAnalyst import analyse_session_performance
-from Engine.agents.TurnClarificationAgent import generate_clarification, generate_turn_diagram
+from Engine.agents.TurnClarificationAgent import (
+    generate_clarification,
+    generate_correct_answer,
+    generate_turn_diagram,
+)
 from Engine.state import TeachingState
 from Models.Content import Concept
 from Models.Session import MasteryScore, Turn, TutorSession
@@ -103,6 +107,25 @@ def _prior_question_strings(memory_turns: list[TurnLike], opening_question: str 
     for t in memory_turns:
         out.append(t.question_generated.strip())
     return out
+
+
+def _build_correct_answer_context(
+    concept_name: str,
+    gap: str | None,
+    student_answer: str,
+    memory_turns: list[TurnLike],
+) -> str:
+    parts: list[str] = [f"Concept: {concept_name}"]
+    if gap and gap.strip():
+        parts.append(f"Gap identified: {gap.strip()}")
+    if student_answer.strip():
+        parts.append(f"Student answer: {student_answer.strip()[:700]}")
+    if memory_turns:
+        recent = memory_turns[-3:]
+        for idx, t in enumerate(recent, start=1):
+            parts.append(f"Recent Q{idx}: {(t.question_generated or '').strip()[:300]}")
+            parts.append(f"Recent A{idx}: {(t.student_input or '').strip()[:300]}")
+    return "\n".join(parts)
 
 
 async def _compute_stuck_streak(db: AsyncSession, session_id: uuid.UUID, new_state: str) -> int:
@@ -271,6 +294,16 @@ async def _background_assets_job(
                 "diagram_failed": diagram_failed,
             }
         )
+        session_uuid = uuid.UUID(session_key)
+        async with AsyncSessionLocal() as db:
+            session_row = (
+                await db.execute(select(TutorSession).where(TutorSession.id == session_uuid))
+            ).scalar_one_or_none()
+            if session_row is not None:
+                diagrams = dict(session_row.concept_diagrams or {})
+                diagrams[str(concept_id)] = svg or ""
+                session_row.concept_diagrams = diagrams
+                await db.commit()
     except Exception as e:
         logger.exception("Background reveal prep failed session=%s", session_key)
         slot.update({"status": "failed", "error": str(e), "ideal_answer": "", "diagram_svg": ""})
@@ -538,6 +571,20 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
             f"Let's try one more concrete angle first: what is one practical use of {concept_row.name}?"
         )
 
+    try:
+        correct_answer_text = await generate_correct_answer(
+            concept_row.name,
+            question_text.strip(),
+            _build_correct_answer_context(concept_row.name, gap, student_answer, memory),
+        )
+    except Exception:
+        logger.exception(
+            "Correct-answer generation failed session=%s concept=%s",
+            session_uuid,
+            concept_uuid,
+        )
+        correct_answer_text = "A model answer could not be generated for this turn."
+
     recent_ai_messages = [
         (m.content.strip() if isinstance(m.content, str) else str(m.content).strip())
         for m in msgs
@@ -586,6 +633,7 @@ async def probe_turn(state: TeachingState, config: RunnableConfig) -> dict[str, 
         classifier_state=cr.state,
         stuck_streak=stuck,
         question_generated=question_text.strip(),
+        correct_answer=correct_answer_text,
         guardrail_triggered=guard_triggered,
         latency_ms=round(elapsed * 1000, 2),
         tokens_used=tokens,
@@ -898,13 +946,20 @@ async def report_work(state: TeachingState, config: RunnableConfig) -> dict[str,
     composer = ReportComposer()
     snapshot = dict(state)
     snapshot["session_name"] = session_row.name or state.get("concept_name") or ""
+    diagrams = dict(session_row.concept_diagrams or {})
+    diagram_svg = str(
+        diagrams.get(str(concept_row.id))
+        or diagrams.get(str(state["concept_id"]))
+        or assets.get("diagram_svg")
+        or ""
+    )
     pdf_path = await composer.compose(
         session_id=session_uuid,
         concept_name=concept_row.name,
         state_snapshot=snapshot,
         analyst=analyst,
         turns=turns,
-        diagram_svg=str(assets.get("diagram_svg") or ""),
+        diagram_svg=diagram_svg,
         ideal_answer=str(assets.get("ideal_answer") or ""),
         review_schedule=review_schedule,
     )

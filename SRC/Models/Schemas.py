@@ -124,6 +124,7 @@ class TurnOut(BaseModel):
     classifier_state: str
     question_generated: str
     created_at: datetime
+    correct_answer: str | None = None
     clarification: str | None = None
     diagram_svg: str | None = None
     clarification_status: str | None = None
